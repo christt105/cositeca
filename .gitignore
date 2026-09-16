@@ -1,2 +1,6 @@
 node_modules/
 site/catalog.json
+tools/telegram-import/cache/
+tools/telegram-import/__pycache__/
+*.session
+*.session-journal
