@@ -1,0 +1,44 @@
+name: Añadir cosita
+description: Añade una película o serie, o una versión nueva de una que ya existe
+title: "[add] "
+labels: ["entry", "add"]
+body:
+  - type: input
+    id: tmdb
+    attributes:
+      label: URL de TMDB o id de IMDB
+      description: URL de TMDB de la película o serie, o id de IMDB tt...
+      placeholder: https://www.themoviedb.org/movie/550-fight-club
+    validations:
+      required: true
+  - type: dropdown
+    id: quality
+    attributes:
+      label: Calidad
+      options:
+        - 1080p
+        - 4K
+    validations:
+      required: true
+  - type: input
+    id: season
+    attributes:
+      label: Temporada
+      description: "Solo series: número de temporada, 0 para especiales, all para la serie completa"
+    validations:
+      required: false
+  - type: input
+    id: tags
+    attributes:
+      label: Etiquetas
+      description: Opcional, separadas por comas
+    validations:
+      required: false
+  - type: input
+    id: link
+    attributes:
+      label: Link de Telegram
+      description: Link del mensaje de Telegram, copiado con Copiar enlace
+      placeholder: https://t.me/c/2229558644/12345
+    validations:
+      required: true

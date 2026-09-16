@@ -1,0 +1,13 @@
+{
+  "name": "cositeca",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate.js",
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "js-yaml": "^4.3.2"
+  }
+}
