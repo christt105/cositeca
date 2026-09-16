@@ -236,6 +236,7 @@ async function main() {
     git(["add", "-A"]);
     git(["commit", "-m", `${verb}: ${subject}`, "-m", `Closes #${issueNumber}`]);
     git(["push"]);
+    gh(["workflow", "run", "deploy.yml"]);
     gh([
       "issue", "close", issueNumber, "--comment",
       `Añadido: ${result.title} (${result.quality}). La web se actualiza en un par de minutos.`,
