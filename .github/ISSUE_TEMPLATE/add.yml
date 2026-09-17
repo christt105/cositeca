@@ -68,6 +68,14 @@ body:
     validations:
       required: false
   - type: input
+    id: poster
+    attributes:
+      label: Portada
+      description: Opcional, URL de una portada distinta a la de TMDB
+      placeholder: https://image.tmdb.org/t/p/w342/....jpg
+    validations:
+      required: false
+  - type: input
     id: link
     attributes:
       label: Link de Telegram

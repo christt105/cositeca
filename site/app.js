@@ -1,4 +1,6 @@
 import { tmdbUrl, imdbUrl, issueUrl } from "./rules.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { renderAdd } from "./add.js";
 
 const headerTools = document.getElementById("header-tools");
 const searchInput = document.getElementById("search");
@@ -7,6 +9,7 @@ const audioFilter = document.getElementById("audio-filter");
 const subsFilter = document.getElementById("subs-filter");
 const grid = document.getElementById("grid");
 const empty = document.getElementById("empty");
+const emptyAddLink = document.getElementById("empty-add-btn");
 const views = {
   grid: document.getElementById("view-grid"),
   title: document.getElementById("view-title"),
@@ -14,23 +17,9 @@ const views = {
   missing: document.getElementById("view-missing"),
 };
 
-const ICONS = {
-  movie: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v2h2V6H5zm12 0v2h2V6h-2zM5 10v2h2v-2H5zm12 0v2h2v-2h-2zM5 14v2h2v-2H5zm12 0v2h2v-2h-2zM9 6v12h6V6H9z"/></svg>`,
-  series: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6l2 2H7l2-2H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm1 2v8h16V8H4z"/></svg>`,
-};
-const TYPE_LABELS = { movie: "Película", series: "Serie" };
-
 let catalog = [];
 let byKey = new Map();
 let visitedWithinApp = false;
-
-function esc(text) {
-  return String(text ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
 
 function normalize(text) {
   return text
@@ -41,10 +30,6 @@ function normalize(text) {
 
 function titleHref(item) {
   return `#/${item.type}/${item.tmdb}`;
-}
-
-function typeIcon(type, extra = "") {
-  return `<span class="type-icon" title="${TYPE_LABELS[type]}" aria-label="${TYPE_LABELS[type]}">${ICONS[type]}${extra ? `<span>${esc(extra)}</span>` : ""}</span>`;
 }
 
 function seasonSummary(item) {
@@ -170,17 +155,12 @@ function renderGrid() {
   );
   empty.classList.toggle("hidden", items.length > 0);
   grid.classList.toggle("hidden", items.length === 0);
+  emptyAddLink.href = state.q ? `#/add?q=${encodeURIComponent(state.q)}` : "#/add";
   grid.innerHTML = items.map(renderCard).join("");
 }
 
 function seasonSortKey(season) {
   return season === "all" ? Infinity : season;
-}
-
-function renderChips(values, className) {
-  return (values || [])
-    .map((v) => `<span class="chip ${className}">${esc(v)}</span>`)
-    .join("");
 }
 
 function renderVersionRow(link) {
@@ -251,7 +231,7 @@ function renderTitle(item) {
     <div class="title__detail" id="title-detail"></div>
     <div class="title__versions">${renderVersions(item)}</div>
     <div class="title__actions">
-      <a class="btn" href="${issueUrl("add.yml", { tmdb })}" target="_blank" rel="noopener">Añadir versión</a>
+      <a class="btn" href="#/add?tmdb=${encodeURIComponent(tmdb)}">Añadir versión</a>
       <a class="btn" href="${issueUrl("fix.yml", { tmdb })}" target="_blank" rel="noopener">Corregir un link</a>
     </div>
   `;
@@ -317,9 +297,10 @@ function route() {
     return;
   }
   if (r.view === "add") {
-    document.getElementById("add-issue-btn").href = issueUrl("add.yml", { tmdb: r.params.get("tmdb") });
     document.title = "Añadir · Cositeca";
     showView("add");
+    renderAdd(r.params, { catalog, byKey });
+    window.scrollTo(0, 0);
     return;
   }
   if (r.view === "title") {

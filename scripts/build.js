@@ -10,6 +10,7 @@ import {
 
 const groups = load(readFileSync("groups.yaml", "utf8"));
 const qualities = load(readFileSync("qualities.yaml", "utf8"));
+const languages = load(readFileSync("languages.yaml", "utf8"));
 
 const apiKey = process.env.TMDB_API_KEY;
 if (!apiKey) {
@@ -191,9 +192,10 @@ async function main() {
     );
   }
   writeFileSync("site/catalog.json", JSON.stringify(catalog));
+  writeFileSync("site/meta.json", JSON.stringify({ qualities, languages, groups }));
   saveTmdbCache(cachePath, tmdbCache);
   console.log(
-    `build: wrote ${catalog.length} titles to site/catalog.json and site/titles/`
+    `build: wrote ${catalog.length} titles to site/catalog.json, site/meta.json and site/titles/`
   );
 }
 

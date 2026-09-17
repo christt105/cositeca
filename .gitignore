@@ -1,5 +1,6 @@
 node_modules/
 site/catalog.json
+site/meta.json
 site/titles/
 .cache/
 tools/telegram-import/cache/
