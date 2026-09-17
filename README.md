@@ -80,3 +80,8 @@ Issues.
 ## Attribution
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+The footer shows the official TMDB logo (`site/assets/tmdb.svg`, the
+"primary short, blue" SVG from
+[TMDB's logos and attribution page](https://www.themoviedb.org/about/logos-attribution)),
+unmodified and linked to themoviedb.org, as their terms require.
