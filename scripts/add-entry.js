@@ -156,16 +156,40 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
     if (audio) updated.audio = audio;
     const subs = parseListField(fields.subs);
     if (subs) updated.subs = subs;
+    if (fields.tags === "-") {
+      delete updated.tags;
+    } else {
+      const tags = parseListField(fields.tags);
+      if (tags) updated.tags = tags;
+    }
     validateLinkEntry(updated, { type, qualities, groups, languages });
     data.links[idx] = orderEntry(updated);
   }
 
   const quality = fields.new_link ? data.links[idx].quality : oldEntry.quality;
+  const deleted = !fields.new_link;
 
   if (data.links.length === 0) {
-    return { filePath, content: null, title, quality, action: "delete" };
+    return { filePath, content: null, title, quality, action: "delete", deleted };
   }
-  return { filePath, content: dump(data), title, quality, action: "write" };
+  return { filePath, content: dump(data), title, quality, action: "write", deleted };
+}
+
+export async function processPoster(fields, { tmdbClient, fileExists, readFile }) {
+  const descriptor = parseTmdbInput(fields.tmdb);
+  const target = await resolveTmdbTarget(descriptor, tmdbClient);
+  const dir = target.type === "movie" ? "movies" : "series";
+  const filePath = `${dir}/${target.id}.yaml`;
+  if (!fileExists(filePath)) {
+    throw new ValidationError(`title not found in the catalog: ${filePath}`);
+  }
+  const poster = fields.poster?.trim() || undefined;
+  validatePoster(poster);
+  const current = load(readFile(filePath));
+  const data = poster
+    ? { title: current.title, poster, links: current.links }
+    : { title: current.title, links: current.links };
+  return { filePath, content: dump(data), title: current.title, action: "write" };
 }
 
 export function checkAntiSpam(createdAt, openEntryIssueCount) {
@@ -195,7 +219,7 @@ async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
   const issueLabels = (process.env.ISSUE_LABELS || "").split(",");
-  const issueLabel = issueLabels.includes("fix") ? "fix" : "add";
+  const issueLabel = ["fix", "poster"].find((l) => issueLabels.includes(l)) ?? "add";
   const body = process.env.ISSUE_BODY;
 
   const qualities = load(readFileSync("qualities.yaml", "utf8"));
@@ -232,8 +256,15 @@ async function main() {
         fileExists: existsSync,
         readFile: (p) => readFileSync(p, "utf8"),
       });
+    } else if (issueLabel === "poster") {
+      const fields = parseIssueBody(body, ["tmdb", "poster"]);
+      result = await processPoster(fields, {
+        tmdbClient,
+        fileExists: existsSync,
+        readFile: (p) => readFileSync(p, "utf8"),
+      });
     } else {
-      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "season"]);
+      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "season", "tags"]);
       result = processFix(fields, {
         qualities,
         groups,
@@ -250,21 +281,37 @@ async function main() {
       writeFileSync(result.filePath, result.content);
     }
 
-    const verb = issueLabel === "add" ? "feat" : "fix";
-    const subject = issueLabel === "add"
-      ? `add ${result.title} ${result.quality}`
-      : `update link for ${result.title}`;
+    const messages = {
+      add: {
+        subject: `feat: add ${result.title} ${result.quality}`,
+        close: `Añadido: ${result.title} (${result.quality}).`,
+      },
+      fix: result.deleted
+        ? {
+          subject: `fix: remove link from ${result.title}`,
+          close: `Borrado el link de ${result.title} (${result.quality}).`,
+        }
+        : {
+          subject: `fix: update link for ${result.title}`,
+          close: `Actualizado el link de ${result.title} (${result.quality}).`,
+        },
+      poster: {
+        subject: `fix: update poster for ${result.title}`,
+        close: `Portada actualizada para ${result.title}.`,
+      },
+    };
+    const { subject, close } = messages[issueLabel];
 
     const git = (args) => execFileSync("git", args, { encoding: "utf8" });
     git(["config", "user.name", "cositeca-bot"]);
     git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
     git(["add", "-A"]);
-    git(["commit", "-m", `${verb}: ${subject}`, "-m", `Closes #${issueNumber}`]);
+    git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
     git(["push"]);
     gh(["workflow", "run", "deploy.yml"]);
     gh([
       "issue", "close", issueNumber, "--comment",
-      `Añadido: ${result.title} (${result.quality}). La web se actualiza en un par de minutos.`,
+      `${close} La web se actualiza en un par de minutos.`,
     ]);
   } catch (err) {
     if (err instanceof ValidationError) {

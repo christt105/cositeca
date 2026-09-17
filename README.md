@@ -25,8 +25,12 @@ A small static catalog of Telegram links to movies and series, enriched with
 - `site/rules.js` holds the regexes and URL helpers shared by the page and
   the Node scripts (`scripts/lib.js` imports it), so `site/` needs no build
   step and the rules exist once.
-- New entries and fixes come in through a GitHub Issue form, processed by
-  `.github/workflows/add-entry.yml`, which commits directly to `main`.
+- New entries, link fixes/deletions and poster changes come in through
+  GitHub Issue forms (`add.yml`, `fix.yml`, `poster.yml`, told apart by
+  their `add`/`fix`/`poster` label), processed by
+  `.github/workflows/add-entry.yml`, which commits directly to `main`. The
+  title page and the add page open those forms with every field prefilled
+  by query string, so users only review and submit.
 
 ## Data format
 
