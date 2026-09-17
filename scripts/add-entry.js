@@ -14,6 +14,8 @@ export const FIELD_LABELS = {
   tmdb: "URL de TMDB o id de IMDB",
   quality: "Calidad",
   season: "Temporada",
+  audio: "Audio",
+  subs: "Subtítulos",
   tags: "Etiquetas",
   link: "Link de Telegram",
   old_link: "Link actual",
@@ -47,13 +49,23 @@ function parseSeasonField(raw) {
   return n;
 }
 
-function parseTagsField(raw) {
-  if (!raw) return undefined;
-  const tags = raw.split(",").map((t) => t.trim()).filter(Boolean);
-  return tags.length ? tags : undefined;
+const ENTRY_KEY_ORDER = ["season", "quality", "audio", "subs", "tags", "link"];
+
+function orderEntry(entry) {
+  const ordered = {};
+  for (const key of ENTRY_KEY_ORDER) {
+    if (entry[key] !== undefined) ordered[key] = entry[key];
+  }
+  return ordered;
 }
 
-export async function processAdd(fields, { qualities, groups, tmdbClient, existingLinks, fileExists, readFile }) {
+function parseListField(raw) {
+  if (!raw) return undefined;
+  const values = raw.split(",").map((t) => t.trim()).filter(Boolean);
+  return values.length ? values : undefined;
+}
+
+export async function processAdd(fields, { qualities, groups, languages, tmdbClient, existingLinks, fileExists, readFile }) {
   const season = parseSeasonField(fields.season);
   const descriptor = parseTmdbInput(fields.tmdb, { hasSeason: season !== undefined });
   const target = await resolveTmdbTarget(descriptor, tmdbClient);
@@ -64,13 +76,11 @@ export async function processAdd(fields, { qualities, groups, tmdbClient, existi
     throw new ValidationError(`link already exists in the catalog: ${fields.link}`);
   }
 
-  const entry = {
-    ...(season !== undefined ? { season } : {}),
-    quality: fields.quality,
-    ...(parseTagsField(fields.tags) ? { tags: parseTagsField(fields.tags) } : {}),
-    link: fields.link,
-  };
-  validateLinkEntry(entry, { type: kind, qualities, groups });
+  const audio = parseListField(fields.audio);
+  const subs = parseListField(fields.subs);
+  const tags = parseListField(fields.tags);
+  const entry = orderEntry({ season, quality: fields.quality, audio, subs, tags, link: fields.link });
+  validateLinkEntry(entry, { type: kind, qualities, groups, languages });
 
   const info = target.type === "movie"
     ? await tmdbClient.getMovie(target.id)
@@ -110,7 +120,7 @@ export function findFileByLink(link, { readdir, readFile }) {
   return null;
 }
 
-export function processFix(fields, { qualities, groups, existingLinks, readdir, readFile }) {
+export function processFix(fields, { qualities, groups, languages, existingLinks, readdir, readFile }) {
   const located = findFileByLink(fields.old_link, { readdir, readFile });
   if (!located) {
     throw new ValidationError(`link not found in the catalog: ${fields.old_link}`);
@@ -134,8 +144,12 @@ export function processFix(fields, { qualities, groups, existingLinks, readdir, 
     if (season !== undefined) {
       updated.season = season;
     }
-    validateLinkEntry(updated, { type, qualities, groups });
-    data.links[idx] = updated;
+    const audio = parseListField(fields.audio);
+    if (audio) updated.audio = audio;
+    const subs = parseListField(fields.subs);
+    if (subs) updated.subs = subs;
+    validateLinkEntry(updated, { type, qualities, groups, languages });
+    data.links[idx] = orderEntry(updated);
   }
 
   const quality = fields.new_link ? data.links[idx].quality : oldEntry.quality;
@@ -178,6 +192,7 @@ async function main() {
 
   const qualities = load(readFileSync("qualities.yaml", "utf8"));
   const groups = load(readFileSync("groups.yaml", "utf8"));
+  const languages = load(readFileSync("languages.yaml", "utf8"));
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 
   const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
@@ -199,20 +214,22 @@ async function main() {
   try {
     let result;
     if (issueLabel === "add") {
-      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "tags", "link"]);
+      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "tags", "link"]);
       result = await processAdd(fields, {
         qualities,
         groups,
+        languages,
         tmdbClient,
         existingLinks,
         fileExists: existsSync,
         readFile: (p) => readFileSync(p, "utf8"),
       });
     } else {
-      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "season"]);
+      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "season"]);
       result = processFix(fields, {
         qualities,
         groups,
+        languages,
         existingLinks,
         readdir: readdirSync,
         readFile: (p) => readFileSync(p, "utf8"),

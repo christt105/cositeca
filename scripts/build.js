@@ -28,6 +28,8 @@ async function buildMovieEntry(id, data) {
     const { groupId } = parseTelegramLink(entry.link);
     return {
       quality: entry.quality,
+      audio: entry.audio ?? [],
+      subs: entry.subs ?? [],
       tags: entry.tags ?? [],
       group: groups[groupId],
       link: entry.link,
@@ -75,6 +77,8 @@ async function buildSeriesEntry(id, data) {
       seasonName: name,
       seasonPoster: poster,
       quality: entry.quality,
+      audio: entry.audio ?? [],
+      subs: entry.subs ?? [],
       tags: entry.tags ?? [],
       group: groups[groupId],
       link: entry.link,

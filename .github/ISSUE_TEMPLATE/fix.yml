@@ -37,6 +37,39 @@ body:
         - 4K
     validations:
       required: false
+  - type: dropdown
+    id: audio
+    attributes:
+      label: Audio
+      description: Opcional, solo si quieres cambiar el audio
+      multiple: true
+      options:
+        - Castellano
+        - Latino
+        - Inglés
+        - Japonés
+        - Francés
+        - Catalán
+        - VO
+    validations:
+      required: false
+  - type: dropdown
+    id: subs
+    attributes:
+      label: Subtítulos
+      description: Opcional, solo si quieres cambiar los subtítulos
+      multiple: true
+      options:
+        - Castellano
+        - Latino
+        - Inglés
+        - Japonés
+        - Francés
+        - Catalán
+        - VO
+        - Forzados
+    validations:
+      required: false
   - type: input
     id: season
     attributes:

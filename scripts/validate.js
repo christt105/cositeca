@@ -9,6 +9,7 @@ import {
 
 const groups = load(readFileSync("groups.yaml", "utf8"));
 const qualities = load(readFileSync("qualities.yaml", "utf8"));
+const languages = load(readFileSync("languages.yaml", "utf8"));
 
 const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
 const tmdbCache = loadTmdbCache(cachePath);
@@ -34,7 +35,7 @@ for (const type of ["movies", "series"]) {
     const path = `${type}/${filename}`;
     try {
       const data = load(readFileSync(path, "utf8"));
-      validateTitleFile(type, filename, data, { qualities, groups });
+      validateTitleFile(type, filename, data, { qualities, groups, languages });
       for (const entry of data.links) {
         const { link } = entry;
         if (seenLinks.has(link)) {
