@@ -221,9 +221,9 @@ body {
   inset: 0;
   z-index: -1;
   background: var(--backdrop) center top / cover no-repeat;
-  opacity: 0.18;
-  mask-image: linear-gradient(to bottom, #000 30%, transparent 90%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 90%);
+  opacity: 0.22;
+  mask-image: linear-gradient(to bottom, #000, transparent 440px);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 440px);
 }
 
 .title__header {
@@ -275,6 +275,18 @@ body {
   flex-wrap: wrap;
   gap: 0.3rem;
   margin-bottom: 0.5rem;
+}
+
+.title__tagline {
+  margin: 0 0 0.5rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.season-group__meta {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.8rem;
 }
 
 .title__overview {

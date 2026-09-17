@@ -215,6 +215,7 @@ function renderVersions(item) {
           <div class="season-group__title">
             <img class="season-group__poster" src="${esc(seasonPoster ?? "")}" alt="">
             <span>${esc(seasonName)}</span>
+            <span class="season-group__meta" data-season="${esc(season)}"></span>
           </div>
           ${links.map(renderVersionRow).join("")}
         </div>
@@ -265,21 +266,39 @@ function renderTitle(item) {
 async function loadDetail(item) {
   const box = document.getElementById("title-detail");
   try {
-    const res = await fetch(`titles/${item.type}-${item.tmdb}.json`);
+    const res = await fetch(`titles/${item.type}-${item.tmdb}.json`, { cache: "no-cache" });
     if (!res.ok) return;
     const detail = await res.json();
     if (parseRoute().id !== item.tmdb) return;
-    renderDetail(box, detail);
+    renderDetail(box, item, detail);
   } catch {
     box.innerHTML = "";
   }
 }
 
-function renderDetail(box, detail) {
-  const genres = (detail.genres || []).map((g) => `<span class="chip">${esc(g)}</span>`).join("");
-  const runtime = detail.runtime ? `<span class="chip">${esc(detail.runtime)} min</span>` : "";
+function renderDetail(box, item, detail) {
+  const chips = (detail.genres || []).map((g) => `<span class="chip">${esc(g)}</span>`);
+  if (item.type === "movie" && detail.runtime) {
+    chips.push(`<span class="chip">${esc(detail.runtime)} min</span>`);
+  }
+  if (item.type === "series" && detail.numberOfSeasons) {
+    const n = detail.numberOfSeasons;
+    chips.push(`<span class="chip">${n} ${n === 1 ? "temporada" : "temporadas"}</span>`);
+  }
+  if (detail.voteAverage) {
+    chips.push(`<span class="chip">★ ${detail.voteAverage.toFixed(1)}</span>`);
+  }
+  const tagline = detail.tagline ? `<p class="title__tagline">${esc(detail.tagline)}</p>` : "";
   const overview = detail.overview ? `<p class="title__overview">${esc(detail.overview)}</p>` : "";
-  box.innerHTML = `<div class="title__genres">${genres}${runtime}</div>${overview}`;
+  box.innerHTML = `<div class="title__genres">${chips.join("")}</div>${tagline}${overview}`;
+  for (const el of views.title.querySelectorAll(".season-group__meta")) {
+    const season = detail.seasons?.[el.dataset.season];
+    if (!season) continue;
+    const parts = [];
+    if (season.episodeCount) parts.push(`${season.episodeCount} ep.`);
+    if (season.airDate) parts.push(season.airDate.slice(0, 4));
+    el.textContent = parts.join(" · ");
+  }
   if (detail.backdrop) {
     views.title.style.setProperty("--backdrop", `url("${detail.backdrop}")`);
     views.title.classList.add("has-backdrop");

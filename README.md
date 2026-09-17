@@ -7,7 +7,12 @@ A small static catalog of Telegram links to movies and series, enriched with
 
 - Each title is a YAML file under `movies/<tmdbId>.yaml` or `series/<tmdbId>.yaml`.
 - `npm run validate` checks every file against the rules below.
-- `npm run build` fetches metadata from TMDB and writes `site/catalog.json`.
+- `npm run build` fetches metadata from TMDB and writes `site/catalog.json`
+  (minified) plus one `site/titles/<type>-<id>.json` per title with the
+  synopsis, tagline, genres, runtime or season count, backdrop and vote,
+  taken from the same TMDB responses the catalog already needs (no extra
+  requests). `site/titles/` is wiped on every build so deleted titles leave
+  no orphans; both outputs are gitignored.
 - `site/` is a static, dependency-free page that reads `catalog.json`. A
   hash router in `app.js` serves `#/` (grid with search and filters, both
   kept in the hash so back/forward and shared URLs restore them),
