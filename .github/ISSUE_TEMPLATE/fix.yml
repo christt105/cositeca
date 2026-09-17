@@ -27,47 +27,28 @@ body:
       placeholder: https://t.me/c/2229558644/12345
     validations:
       required: false
-  - type: dropdown
+  - type: input
     id: quality
     attributes:
       label: Calidad
-      description: Opcional, solo si quieres cambiar la calidad
-      options:
-        - 1080p
-        - 4K
+      description: "Opcional, solo si quieres cambiar la calidad: 1080p o 4K"
+      placeholder: 1080p
     validations:
       required: false
-  - type: dropdown
+  - type: input
     id: audio
     attributes:
       label: Audio
-      description: Opcional, solo si quieres cambiar el audio
-      multiple: true
-      options:
-        - Castellano
-        - Latino
-        - Inglés
-        - Japonés
-        - Francés
-        - Catalán
-        - VO
+      description: "Opcional, solo si quieres cambiar el audio, separado por comas: Castellano, Latino, Inglés, Japonés, Francés, Catalán, VO"
+      placeholder: Castellano, Inglés
     validations:
       required: false
-  - type: dropdown
+  - type: input
     id: subs
     attributes:
       label: Subtítulos
-      description: Opcional, solo si quieres cambiar los subtítulos
-      multiple: true
-      options:
-        - Castellano
-        - Latino
-        - Inglés
-        - Japonés
-        - Francés
-        - Catalán
-        - VO
-        - Forzados
+      description: "Opcional, solo si quieres cambiar los subtítulos, separado por comas: Castellano, Latino, Inglés, Japonés, Francés, Catalán, VO, Forzados"
+      placeholder: Castellano, Forzados
     validations:
       required: false
   - type: input

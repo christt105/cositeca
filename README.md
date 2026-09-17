@@ -38,7 +38,9 @@ A small static catalog of Telegram links to movies and series, enriched with
 `qualities.yaml` is the closed, ordered list of valid quality values.
 `languages.yaml` holds the closed lists of valid `audio` and `subs` values
 (the `subs` list is the audio one plus `Forzados`). Add a language there and
-it becomes valid everywhere; the issue forms list the same options by hand.
+it becomes valid everywhere; the issue forms mention the options in the
+field description (quality, audio and subs are plain text inputs because
+GitHub only prefills `input` fields from the query string, not dropdowns).
 
 ```yaml
 title: Some title          # informational only, the site uses the TMDB title
