@@ -8,8 +8,8 @@
    y copia la URL de su página (por ejemplo
    `https://www.themoviedb.org/movie/550-fight-club`). Si no está en TMDB,
    también vale un id de IMDB (empieza por `tt`).
-4. En la web de Cositeca, pulsa "Añadir" (arriba, o dentro de una tarjeta si
-   ya existe el título y quieres sumar otra versión).
+4. En la web de Cositeca, pulsa "Añadir" (arriba, o "Añadir versión" en la
+   página del título si ya existe y quieres sumar otra versión).
 5. Se abrirá un formulario de Issue en GitHub. Rellena:
    - **URL de TMDB o id de IMDB**: lo del paso 3.
    - **Calidad**: 1080p o 4K.
@@ -24,5 +24,5 @@
 
 ## Corregir o borrar un link
 
-Desde la tarjeta del título, pulsa "Corregir un link" y rellena el link
+Desde la página del título, pulsa "Corregir un link" y rellena el link
 actual y, si quieres cambiarlo, el link nuevo (déjalo vacío para borrarlo).
