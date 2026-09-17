@@ -32,10 +32,17 @@ const ROUTES = [
     },
   },
   {
-    pattern: /^\/tv\/(\d{1,9})$/,
+    pattern: /^\/(movie|tv)\/(\d{1,9})$/,
     ttl: 86400,
     build(match) {
-      return { path: `/tv/${match[1]}`, query: {} };
+      return { path: `/${match[1]}/${match[2]}`, query: {} };
+    },
+  },
+  {
+    pattern: /^\/find\/(tt\d{1,12})$/,
+    ttl: 86400,
+    build(match) {
+      return { path: `/find/${match[1]}`, query: { external_source: "imdb_id" } };
     },
   },
 ];

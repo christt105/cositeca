@@ -79,12 +79,14 @@ metadata for the whole catalog.
 
 The page never holds a TMDB key. The guided "Añadir" page searches TMDB
 through a small Cloudflare Worker in `tools/tmdb-proxy/` (`worker.js`, no
-dependencies, `wrangler.toml`). It exposes only three read-only routes,
+dependencies, `wrangler.toml`). It exposes only a few read-only routes,
 always with `language=es-ES`, and rejects anything else with 404:
 
 - `GET /search?q=<text>&type=movie|tv|multi&page=<1-99>`
 - `GET /images?type=movie|tv&id=<tmdbId>` (posters, `es,en,null`)
-- `GET /tv/<tmdbId>` (series info including the seasons list)
+- `GET /movie/<tmdbId>` and `GET /tv/<tmdbId>` (title info; series include
+  the seasons list)
+- `GET /find/<imdbId>` (resolve an IMDB id)
 
 CORS is limited to `https://christt105.github.io`, `localhost`,
 `127.0.0.1` and `192.168.x.x` (local previews). Responses are cached at
