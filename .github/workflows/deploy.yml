@@ -17,9 +17,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: tmdb-cache-${{ github.run_id }}
+          restore-keys: |
+            tmdb-cache-
       - run: npm ci
       - run: npm run validate
         env:

@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
 export const TELEGRAM_LINK_RE = /^https:\/\/t\.me\/c\/(\d+)\/(?:(\d+)\/)?(\d+)$/;
 export const TMDB_URL_RE = /^https?:\/\/(?:www\.)?themoviedb\.org\/(movie|tv)\/(\d+)(?:-.*)?$/;
 export const TMDB_ID_RE = /^tmdb:(\d+)$/;
@@ -88,6 +91,13 @@ export function validateTags(tags) {
   }
 }
 
+export function validatePoster(poster) {
+  if (poster === undefined) return;
+  if (typeof poster !== "string" || poster.trim() === "") {
+    throw new ValidationError("poster must be a non-empty string");
+  }
+}
+
 export function validateLinkEntry(entry, { type, qualities, groups }) {
   if (typeof entry !== "object" || entry === null) {
     throw new ValidationError("each link entry must be an object");
@@ -117,13 +127,27 @@ export function validateTitleFile(type, filename, data, { qualities, groups }) {
   if (!Array.isArray(data.links) || data.links.length === 0) {
     throw new ValidationError("links must be a non-empty array");
   }
+  validatePoster(data.poster);
   const entryType = type === "movies" ? "movie" : "series";
   for (const entry of data.links) {
     validateLinkEntry(entry, { type: entryType, qualities, groups });
   }
 }
 
-export function createTmdbClient(apiKey) {
+export function loadTmdbCache(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function saveTmdbCache(path, cache) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(cache));
+}
+
+export function createTmdbClient(apiKey, { cache = {} } = {}) {
   const useBearer = apiKey.startsWith("eyJ");
   async function request(path, params = {}) {
     const url = new URL(`https://api.themoviedb.org/3${path}`);
@@ -143,11 +167,23 @@ export function createTmdbClient(apiKey) {
     }
     return res.json();
   }
+  async function cached(key, fetcher) {
+    if (Object.prototype.hasOwnProperty.call(cache, key)) {
+      return cache[key];
+    }
+    const value = await fetcher();
+    cache[key] = value;
+    return value;
+  }
   return {
-    getMovie: (id) => request(`/movie/${id}`),
-    getTv: (id) => request(`/tv/${id}`),
-    getTvExternalIds: (id) => request(`/tv/${id}/external_ids`),
-    getTvSeason: (id, season) => request(`/tv/${id}/season/${season}`),
+    getMovie: (id) => cached(`movie:${id}`, () => request(`/movie/${id}`)),
+    getTv: (id) => cached(`tv:${id}`, () => request(`/tv/${id}`)),
+    getTvExternalIds: (id) =>
+      cached(`tvExternalIds:${id}`, () => request(`/tv/${id}/external_ids`)),
+    getTvSeason: (id, season) =>
+      cached(`tvSeason:${id}:${season}`, () =>
+        request(`/tv/${id}/season/${season}`)
+      ),
     findByImdb: (imdbId) =>
       request(`/find/${imdbId}`, { external_source: "imdb_id" }),
     posterUrl: (path) =>

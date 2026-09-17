@@ -1,12 +1,19 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { load } from "js-yaml";
-import { validateTitleFile, createTmdbClient } from "./lib.js";
+import {
+  validateTitleFile,
+  createTmdbClient,
+  loadTmdbCache,
+  saveTmdbCache,
+} from "./lib.js";
 
 const groups = load(readFileSync("groups.yaml", "utf8"));
 const qualities = load(readFileSync("qualities.yaml", "utf8"));
 
+const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
+const tmdbCache = loadTmdbCache(cachePath);
 const tmdbClient = process.env.TMDB_API_KEY
-  ? createTmdbClient(process.env.TMDB_API_KEY)
+  ? createTmdbClient(process.env.TMDB_API_KEY, { cache: tmdbCache })
   : null;
 
 if (!tmdbClient) {
@@ -53,6 +60,10 @@ for (const type of ["movies", "series"]) {
       errors++;
     }
   }
+}
+
+if (tmdbClient) {
+  saveTmdbCache(cachePath, tmdbCache);
 }
 
 if (errors > 0) {

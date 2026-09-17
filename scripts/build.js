@@ -1,6 +1,12 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { load } from "js-yaml";
-import { parseTelegramLink, createTmdbClient } from "./lib.js";
+import {
+  parseTelegramLink,
+  createTmdbClient,
+  loadTmdbCache,
+  saveTmdbCache,
+} from "./lib.js";
 
 const groups = load(readFileSync("groups.yaml", "utf8"));
 const qualities = load(readFileSync("qualities.yaml", "utf8"));
@@ -10,7 +16,9 @@ if (!apiKey) {
   console.error("TMDB_API_KEY is required to build");
   process.exit(1);
 }
-const tmdb = createTmdbClient(apiKey);
+const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
+const tmdbCache = loadTmdbCache(cachePath);
+const tmdb = createTmdbClient(apiKey, { cache: tmdbCache });
 
 const seasonNameOverrides = { all: "Serie completa" };
 
@@ -32,7 +40,7 @@ async function buildMovieEntry(id, data) {
     title: info.title,
     originalTitle: info.original_title,
     year: info.release_date ? info.release_date.slice(0, 4) : null,
-    poster: tmdb.posterUrl(info.poster_path),
+    poster: data.poster ?? tmdb.posterUrl(info.poster_path),
     qualities: dedupeQualities(links.map((l) => l.quality)),
     links,
   };
@@ -42,16 +50,17 @@ async function buildSeriesEntry(id, data) {
   const info = await tmdb.getTv(id);
   const externalIds = await tmdb.getTvExternalIds(id);
   const seasonCache = new Map();
+  const seriesPoster = data.poster ?? tmdb.posterUrl(info.poster_path);
 
   async function seasonInfo(season) {
     if (season === "all") {
-      return { name: seasonNameOverrides.all, poster: tmdb.posterUrl(info.poster_path) };
+      return { name: seasonNameOverrides.all, poster: seriesPoster };
     }
     if (seasonCache.has(season)) return seasonCache.get(season);
-    const data = await tmdb.getTvSeason(id, season);
+    const seasonData = await tmdb.getTvSeason(id, season);
     const result = {
-      name: data.name,
-      poster: tmdb.posterUrl(data.poster_path) ?? tmdb.posterUrl(info.poster_path),
+      name: seasonData.name,
+      poster: tmdb.posterUrl(seasonData.poster_path) ?? seriesPoster,
     };
     seasonCache.set(season, result);
     return result;
@@ -79,7 +88,7 @@ async function buildSeriesEntry(id, data) {
     title: info.name,
     originalTitle: info.original_name,
     year: info.first_air_date ? info.first_air_date.slice(0, 4) : null,
-    poster: tmdb.posterUrl(info.poster_path),
+    poster: seriesPoster,
     qualities: dedupeQualities(links.map((l) => l.quality)),
     links,
   };
@@ -90,8 +99,30 @@ function dedupeQualities(list) {
   return qualities.filter((q) => set.has(q));
 }
 
+function getAddedTimestamps() {
+  const output = execFileSync(
+    "git",
+    ["log", "--diff-filter=A", "--name-only", "--format=%x00%at"],
+    { maxBuffer: 1024 * 1024 * 200 }
+  ).toString();
+  const timestamps = new Map();
+  let currentTimestamp = null;
+  for (const line of output.split("\n")) {
+    if (line.startsWith("\0")) {
+      currentTimestamp = Number(line.slice(1));
+    } else if (line.trim() && currentTimestamp !== null) {
+      // git log walks newest to oldest, so the last write for a given path
+      // (from the oldest commit that added it) is the one that sticks.
+      timestamps.set(line, currentTimestamp);
+    }
+  }
+  return timestamps;
+}
+
 async function main() {
-  const catalog = [];
+  const addedTimestamps = getAddedTimestamps();
+  const now = Math.floor(Date.now() / 1000);
+  const entries = [];
   for (const [type, builder] of [
     ["movies", buildMovieEntry],
     ["series", buildSeriesEntry],
@@ -104,17 +135,24 @@ async function main() {
     }
     for (const filename of filenames) {
       const id = filename.replace(/\.yaml$/, "");
-      const data = load(readFileSync(`${type}/${filename}`, "utf8"));
+      const path = `${type}/${filename}`;
+      const data = load(readFileSync(path, "utf8"));
       try {
-        catalog.push(await builder(id, data));
+        const entry = await builder(id, data);
+        entries.push({ entry, addedAt: addedTimestamps.get(path) ?? now });
       } catch (err) {
-        console.warn(`skipping ${type}/${filename}: ${err.message}`);
+        console.warn(`skipping ${path}: ${err.message}`);
       }
     }
   }
-  catalog.sort((a, b) => a.title.localeCompare(b.title, "es"));
+  entries.sort((a, b) => {
+    if (a.addedAt !== b.addedAt) return b.addedAt - a.addedAt;
+    return a.entry.title.localeCompare(b.entry.title, "es");
+  });
+  const catalog = entries.map((e) => e.entry);
   mkdirSync("site", { recursive: true });
   writeFileSync("site/catalog.json", JSON.stringify(catalog, null, 2));
+  saveTmdbCache(cachePath, tmdbCache);
   console.log(`build: wrote ${catalog.length} titles to site/catalog.json`);
 }
 

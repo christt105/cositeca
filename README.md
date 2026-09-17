@@ -19,6 +19,7 @@ A small static catalog of Telegram links to movies and series, enriched with
 
 ```yaml
 title: Some title          # informational only, the site uses the TMDB title
+poster: https://example.com/poster.jpg  # optional, overrides the TMDB poster
 links:
   - season: 1               # series only: integer >= 0 (0 = specials) or "all"
     quality: 1080p           # required, must be one of qualities.yaml
@@ -37,6 +38,8 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
   group id must exist in `groups.yaml`. Invite links (`t.me/+...`,
   `joinchat`, or anything not starting with `https://t.me/c/`) are rejected.
 - The same `link` cannot appear twice in the whole repository.
+- `poster`, if present, must be a non-empty string and is used as-is instead
+  of the TMDB poster.
 
 ## TMDB
 
@@ -45,6 +48,22 @@ starts with `eyJ` it is sent as a `Bearer` token, otherwise as `?api_key=`.
 Every request uses `language=es-ES`. Titles can be identified by a
 `themoviedb.org` URL, a `tmdb:<id>` reference, or an IMDB id (resolved via
 `/3/find`).
+
+`validate` and `build` share a JSON response cache (`.cache/tmdb.json` by
+default, override with `TMDB_CACHE_PATH`) so re-running them only fetches
+TMDB data for ids not already cached. In CI (`deploy.yml`) that directory is
+persisted with `actions/cache`, keyed per run and restored from the most
+recent previous run, so a push that only adds one new title doesn't refetch
+metadata for the whole catalog.
+
+## Catalog order
+
+`build` sorts the catalog by when each `movies/<id>.yaml` / `series/<id>.yaml`
+file was first added to git history (newest first), not alphabetically. It
+reads this from `git log --diff-filter=A`, so it needs full history
+(`fetch-depth: 0` in `deploy.yml`); files not yet committed sort first. Ties
+(e.g. files added in the same bulk-import commit) fall back to alphabetical
+by title.
 
 ## Adding or fixing an entry
 
