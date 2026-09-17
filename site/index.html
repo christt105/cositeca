@@ -9,36 +9,49 @@
 </head>
 <body>
   <header class="header">
-    <h1 class="header__title">Cositeca</h1>
-    <input id="search" class="search" type="search" placeholder="Busca por título, id de TMDB o IMDB">
-    <div class="filters" id="filters">
-      <button class="filter-btn is-active" data-filter="all">Todo</button>
-      <button class="filter-btn" data-filter="movie">Películas</button>
-      <button class="filter-btn" data-filter="series">Series</button>
-      <select id="audio-filter" class="filter-select" aria-label="Audio"><option value="">Audio</option></select>
-      <select id="subs-filter" class="filter-select" aria-label="Subtítulos"><option value="">Subtítulos</option></select>
+    <a class="header__title" href="#/">Cositeca</a>
+    <div class="header__tools" id="header-tools">
+      <input id="search" class="search" type="search" placeholder="Busca por título, id de TMDB o IMDB">
+      <div class="filters" id="filters">
+        <button class="filter-btn is-active" data-filter="all">Todo</button>
+        <button class="filter-btn" data-filter="movie">Películas</button>
+        <button class="filter-btn" data-filter="series">Series</button>
+        <select id="audio-filter" class="filter-select" aria-label="Audio"><option value="">Audio</option></select>
+        <select id="subs-filter" class="filter-select" aria-label="Subtítulos"><option value="">Subtítulos</option></select>
+      </div>
     </div>
-    <a class="btn btn--add" id="add-btn" href="#" target="_blank" rel="noopener">Añadir</a>
+    <a class="btn btn--add" id="add-btn" href="#/add">Añadir</a>
   </header>
 
   <main>
-    <div id="grid" class="grid"></div>
-    <div id="empty" class="empty hidden">
-      <p>No está en la Cositeca. ¿La añades?</p>
-      <a class="btn btn--add" id="empty-add-btn" href="#" target="_blank" rel="noopener">Añadir</a>
-    </div>
+    <section id="view-grid" class="view">
+      <div id="grid" class="grid"></div>
+      <div id="empty" class="empty hidden">
+        <p>No está en la Cositeca. ¿La añades?</p>
+        <a class="btn btn--add" href="#/add">Añadir</a>
+      </div>
+    </section>
+
+    <section id="view-title" class="view title hidden"></section>
+
+    <section id="view-add" class="view add hidden">
+      <a class="back" href="#/">&larr; Volver</a>
+      <h2>Añadir una cosita</h2>
+      <p>De momento se añade rellenando un formulario en GitHub.</p>
+      <a class="btn btn--add" id="add-issue-btn" href="#" target="_blank" rel="noopener">Abrir el formulario</a>
+    </section>
+
+    <section id="view-missing" class="view empty hidden">
+      <p>Ese título no está en la Cositeca.</p>
+      <a class="btn" href="#/">Volver al catálogo</a>
+    </section>
   </main>
 
-  <div id="modal" class="modal hidden">
-    <div class="modal__backdrop" id="modal-backdrop"></div>
-    <div class="modal__panel">
-      <button class="modal__close" id="modal-close" aria-label="Cerrar">&times;</button>
-      <div class="modal__body" id="modal-body"></div>
-    </div>
-  </div>
-
   <footer class="footer">
-    <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    <p class="footer__tmdb">
+      <a href="https://www.themoviedb.org" target="_blank" rel="noopener"><img class="footer__logo" src="assets/tmdb.svg" alt="TMDB"></a>
+      <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+    </p>
     <p><a href="https://github.com/christt105/cositeca/blob/main/GUIA.md" target="_blank" rel="noopener">Cómo añadir una cosita</a></p>
   </footer>
 
