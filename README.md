@@ -75,6 +75,41 @@ persisted with `actions/cache`, keyed per run and restored from the most
 recent previous run, so a push that only adds one new title doesn't refetch
 metadata for the whole catalog.
 
+## TMDB proxy (Cloudflare Worker)
+
+The page never holds a TMDB key. The guided "Añadir" page searches TMDB
+through a small Cloudflare Worker in `tools/tmdb-proxy/` (`worker.js`, no
+dependencies, `wrangler.toml`). It exposes only three read-only routes,
+always with `language=es-ES`, and rejects anything else with 404:
+
+- `GET /search?q=<text>&type=movie|tv|multi&page=<1-99>`
+- `GET /images?type=movie|tv&id=<tmdbId>` (posters, `es,en,null`)
+- `GET /tv/<tmdbId>` (series info including the seasons list)
+
+CORS is limited to `https://christt105.github.io`, `localhost`,
+`127.0.0.1` and `192.168.x.x` (local previews). Responses are cached at
+the edge (1 h for searches, 1 day for images and series) and a
+`[[ratelimits]]` binding caps each IP at 60 requests per minute so the
+Worker cannot be used as a public TMDB mirror.
+
+Local development (no account needed): put `TMDB_API_KEY=...` in
+`tools/tmdb-proxy/.dev.vars` (gitignored) and run
+`npx wrangler dev` from that directory; it listens on `localhost:8787`.
+
+Deploy (once per change, from `tools/tmdb-proxy/`, with
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment):
+
+```sh
+npx wrangler deploy
+npx wrangler secret put TMDB_API_KEY
+```
+
+The first command prints the Worker URL
+(`https://cositeca-tmdb-proxy.<account>.workers.dev`); paste it into
+`TMDB_PROXY_URL` in `site/rules.js`. While that constant is empty the page
+uses `localStorage.tmdbProxy` if set (development only) and otherwise
+falls back to the plain GitHub issue form.
+
 ## Catalog order
 
 `build` sorts the catalog by when each `movies/<id>.yaml` / `series/<id>.yaml`

@@ -6,3 +6,5 @@ tools/telegram-import/cache/
 tools/telegram-import/__pycache__/
 *.session
 *.session-journal
+tools/tmdb-proxy/.dev.vars
+tools/tmdb-proxy/.wrangler/

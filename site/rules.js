@@ -4,6 +4,7 @@ export const TMDB_ID_RE = /^tmdb:(\d+)$/;
 export const IMDB_ID_RE = /^tt\d+$/;
 
 export const REPO_URL = "https://github.com/christt105/cositeca";
+export const TMDB_PROXY_URL = "";
 
 export function tmdbUrl(type, id) {
   const kind = type === "movie" ? "movie" : "tv";
