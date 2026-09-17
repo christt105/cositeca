@@ -258,3 +258,16 @@ body {
 }
 
 .footer a { color: var(--accent); }
+
+.footer__tmdb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.footer__logo {
+  height: 1.2rem;
+  display: block;
+}
