@@ -185,7 +185,7 @@ filtersEl.addEventListener("click", (e) => {
 
 searchInput.addEventListener("input", render);
 
-fetch("catalog.json")
+fetch("catalog.json", { cache: "no-cache" })
   .then((res) => res.json())
   .then((data) => {
     catalog = data;
