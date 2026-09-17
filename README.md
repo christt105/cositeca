@@ -85,6 +85,21 @@ persisted with `actions/cache`, keyed per run and restored from the most
 recent previous run, so a push that only adds one new title doesn't refetch
 metadata for the whole catalog.
 
+## PWA and offline
+
+`site/manifest.webmanifest` (relative `start_url`/`scope`, standalone,
+icons in `site/assets/`, generated from `icon.svg`) makes the site
+installable; `index.html` also carries the `apple-touch-icon` and
+`apple-mobile-web-app-*` tags iOS needs. `site/sw.js` is a service worker
+registered from `app.js`: it precaches the shell plus `catalog.json` and
+`meta.json` on install, then serves everything same-origin (and posters
+from `image.tmdb.org`, capped at 300) network-first with cache fallback,
+so a deploy is picked up as soon as there is network and the last seen
+catalog still opens offline. A new worker activates immediately
+(`skipWaiting` + `clients.claim`) and the page reloads once when the
+controller changes. Bump `CACHE` in `sw.js` when the shell file list
+changes.
+
 ## TMDB proxy (Cloudflare Worker)
 
 The page never holds a TMDB key. The guided "Añadir" page searches TMDB
