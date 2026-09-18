@@ -6,8 +6,10 @@ import { bindTitleEditing } from "./edit.js";
 const headerTools = document.getElementById("header-tools");
 const searchInput = document.getElementById("search");
 const filtersEl = document.getElementById("filters");
-const audioFilter = document.getElementById("audio-filter");
-const subsFilter = document.getElementById("subs-filter");
+const filterPanelToggle = document.getElementById("filter-panel-toggle");
+const filterPanel = document.getElementById("filter-panel");
+const genreFilter = document.getElementById("genre-filter");
+const tagFilter = document.getElementById("tag-filter");
 const grid = document.getElementById("grid");
 const empty = document.getElementById("empty");
 const emptyAddLink = document.getElementById("empty-add-btn");
@@ -58,13 +60,19 @@ function parseRoute() {
   return { view: "missing" };
 }
 
+function activeTypes() {
+  return [...filtersEl.querySelectorAll(".filter-toggle")]
+    .filter((b) => b.classList.contains("is-active"))
+    .map((b) => b.dataset.type);
+}
+
 function gridState() {
-  const type = filtersEl.querySelector(".filter-btn.is-active")?.dataset.filter ?? "all";
+  const types = activeTypes();
   return {
     q: searchInput.value.trim(),
-    type: type === "all" ? "" : type,
-    audio: audioFilter.value,
-    subs: subsFilter.value,
+    type: types.length === 1 ? types[0] : "",
+    genre: genreFilter.value,
+    tag: tagFilter.value,
   };
 }
 
@@ -79,12 +87,14 @@ function gridHash(state) {
 
 function applyGridState(params) {
   searchInput.value = params.get("q") ?? "";
-  const type = params.get("type") || "all";
-  for (const b of filtersEl.querySelectorAll(".filter-btn")) {
-    b.classList.toggle("is-active", b.dataset.filter === type);
+  const type = params.get("type") || "";
+  for (const b of filtersEl.querySelectorAll(".filter-toggle")) {
+    const active = !type || b.dataset.type === type;
+    b.classList.toggle("is-active", active);
+    b.setAttribute("aria-pressed", String(active));
   }
-  audioFilter.value = params.get("audio") ?? "";
-  subsFilter.value = params.get("subs") ?? "";
+  genreFilter.value = params.get("genre") ?? "";
+  tagFilter.value = params.get("tag") ?? "";
 }
 
 function showView(name) {
@@ -109,18 +119,19 @@ function matchesSearch(item, query) {
   );
 }
 
-function hasLanguage(item, field, value) {
+function hasGenre(item, value) {
   if (!value) return true;
-  return item.links.some((link) => (link[field] || []).includes(value));
+  return (item.genres || []).includes(value);
 }
 
-function fillLanguageFilter(select, field) {
+function hasTag(item, value) {
+  if (!value) return true;
+  return item.links.some((link) => (link.tags || []).includes(value));
+}
+
+function fillOptionsFilter(select, collectValues) {
   const values = new Set();
-  for (const item of catalog) {
-    for (const link of item.links) {
-      for (const value of link[field] || []) values.add(value);
-    }
-  }
+  for (const item of catalog) collectValues(item, values);
   for (const value of [...values].sort((a, b) => a.localeCompare(b, "es"))) {
     const option = document.createElement("option");
     option.value = value;
@@ -150,8 +161,8 @@ function renderGrid() {
   const items = catalog.filter(
     (item) =>
       (!state.type || item.type === state.type) &&
-      hasLanguage(item, "audio", state.audio) &&
-      hasLanguage(item, "subs", state.subs) &&
+      hasGenre(item, state.genre) &&
+      hasTag(item, state.tag) &&
       matchesSearch(item, state.q)
   );
   empty.classList.toggle("hidden", items.length > 0);
@@ -344,17 +355,24 @@ function navigateGrid(push) {
 }
 
 filtersEl.addEventListener("click", (e) => {
-  const btn = e.target.closest(".filter-btn");
+  const btn = e.target.closest(".filter-toggle");
   if (!btn) return;
-  for (const b of filtersEl.querySelectorAll(".filter-btn")) {
-    b.classList.toggle("is-active", b === btn);
-  }
+  const deactivating = btn.classList.contains("is-active");
+  if (deactivating && activeTypes().length <= 1) return;
+  btn.classList.toggle("is-active");
+  btn.setAttribute("aria-pressed", String(btn.classList.contains("is-active")));
   navigateGrid(true);
 });
 
+filterPanelToggle.addEventListener("click", () => {
+  const open = filterPanel.classList.toggle("hidden") === false;
+  filterPanelToggle.setAttribute("aria-expanded", String(open));
+});
+
+genreFilter.addEventListener("change", () => navigateGrid(true));
+tagFilter.addEventListener("change", () => navigateGrid(true));
+
 searchInput.addEventListener("input", () => navigateGrid(false));
-audioFilter.addEventListener("change", () => navigateGrid(true));
-subsFilter.addEventListener("change", () => navigateGrid(true));
 
 window.addEventListener("hashchange", () => {
   visitedWithinApp = true;
@@ -366,8 +384,14 @@ fetch("catalog.json", { cache: "no-cache" })
   .then((data) => {
     catalog = data;
     byKey = new Map(catalog.map((item) => [`${item.type}/${item.tmdb}`, item]));
-    fillLanguageFilter(audioFilter, "audio");
-    fillLanguageFilter(subsFilter, "subs");
+    fillOptionsFilter(genreFilter, (item, values) => {
+      for (const genre of item.genres || []) values.add(genre);
+    });
+    fillOptionsFilter(tagFilter, (item, values) => {
+      for (const link of item.links) {
+        for (const tag of link.tags || []) values.add(tag);
+      }
+    });
     route();
   });
 
