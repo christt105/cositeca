@@ -303,11 +303,31 @@ async function main() {
     const { subject, close } = messages[issueLabel];
 
     const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+    const branch = `bot/entry-${issueNumber}`;
     git(["config", "user.name", "cositeca-bot"]);
     git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
+    git(["checkout", "-b", branch]);
     git(["add", "-A"]);
     git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
-    git(["push"]);
+    git(["push", "-u", "origin", branch]);
+
+    const prUrl = gh([
+      "pr", "create", "--base", "main", "--head", branch,
+      "--title", subject, "--body", `Closes #${issueNumber}`,
+    ]).trim();
+    const prNumber = prUrl.split("/").pop();
+
+    try {
+      gh(["pr", "checks", prNumber, "--watch"]);
+    } catch {
+      gh([
+        "issue", "comment", issueNumber, "--body",
+        "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
+      ]);
+      return;
+    }
+
+    gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
     gh(["workflow", "run", "deploy.yml"]);
     gh([
       "issue", "comment", issueNumber, "--body",
