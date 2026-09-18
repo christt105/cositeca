@@ -8,6 +8,7 @@ import {
   validateLinkEntry,
   validateQuality,
   validatePoster,
+  sanitizeNewLanguage,
   createTmdbClient,
 } from "./lib.js";
 
@@ -17,6 +18,8 @@ export const FIELD_LABELS = {
   season: "Temporada",
   audio: "Audio",
   subs: "Subtítulos",
+  new_audio_language: "Nuevo idioma (audio)",
+  new_subs_language: "Nuevo idioma (subtítulos)",
   tags: "Etiquetas",
   poster: "Portada",
   link: "Link de Telegram",
@@ -67,6 +70,18 @@ function parseListField(raw) {
   return values.length ? values : undefined;
 }
 
+function dedupe(list) {
+  return [...new Set(list)];
+}
+
+function applyNewLanguage(raw, list, languages) {
+  const resolved = sanitizeNewLanguage(raw, languages[list]);
+  if (resolved === undefined) return { values: undefined, changed: false };
+  const changed = !languages[list].includes(resolved);
+  if (changed) languages[list].push(resolved);
+  return { values: [resolved], changed };
+}
+
 export async function processAdd(fields, { qualities, groups, languages, tmdbClient, existingLinks, fileExists, readFile }) {
   const season = parseSeasonField(fields.season);
   const descriptor = parseTmdbInput(fields.tmdb, { hasSeason: season !== undefined });
@@ -78,9 +93,16 @@ export async function processAdd(fields, { qualities, groups, languages, tmdbCli
     throw new ValidationError(`link already exists in the catalog: ${fields.link}`);
   }
 
-  const audio = parseListField(fields.audio);
-  const subs = parseListField(fields.subs);
+  let audio = parseListField(fields.audio);
+  let subs = parseListField(fields.subs);
   const tags = parseListField(fields.tags);
+
+  const newAudio = applyNewLanguage(fields.new_audio_language, "audio", languages);
+  if (newAudio.values) audio = dedupe([...(audio ?? []), ...newAudio.values]);
+  const newSubs = applyNewLanguage(fields.new_subs_language, "subs", languages);
+  if (newSubs.values) subs = dedupe([...(subs ?? []), ...newSubs.values]);
+  const languagesChanged = newAudio.changed || newSubs.changed;
+
   const entry = orderEntry({ season, quality: fields.quality, audio, subs, tags, link: fields.link });
   validateLinkEntry(entry, { type: kind, qualities, groups, languages });
 
@@ -104,7 +126,7 @@ export async function processAdd(fields, { qualities, groups, languages, tmdbCli
     data = { title: data.title, poster, links: data.links };
   }
 
-  return { filePath, content: dump(data), title, quality: fields.quality, action: "write" };
+  return { filePath, content: dump(data), title, quality: fields.quality, action: "write", languagesChanged };
 }
 
 export function findFileByLink(link, { readdir, readFile }) {
@@ -136,6 +158,7 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
   const { filePath, data, idx, type } = located;
   const oldEntry = data.links[idx];
   const title = data.title;
+  let languagesChanged = false;
 
   if (!fields.new_link) {
     data.links.splice(idx, 1);
@@ -162,6 +185,13 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
       const tags = parseListField(fields.tags);
       if (tags) updated.tags = tags;
     }
+
+    const newAudio = applyNewLanguage(fields.new_audio_language, "audio", languages);
+    if (newAudio.values) updated.audio = dedupe([...(updated.audio ?? []), ...newAudio.values]);
+    const newSubs = applyNewLanguage(fields.new_subs_language, "subs", languages);
+    if (newSubs.values) updated.subs = dedupe([...(updated.subs ?? []), ...newSubs.values]);
+    languagesChanged = newAudio.changed || newSubs.changed;
+
     validateLinkEntry(updated, { type, qualities, groups, languages });
     data.links[idx] = orderEntry(updated);
   }
@@ -170,9 +200,9 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
   const deleted = !fields.new_link;
 
   if (data.links.length === 0) {
-    return { filePath, content: null, title, quality, action: "delete", deleted };
+    return { filePath, content: null, title, quality, action: "delete", deleted, languagesChanged };
   }
-  return { filePath, content: dump(data), title, quality, action: "write", deleted };
+  return { filePath, content: dump(data), title, quality, action: "write", deleted, languagesChanged };
 }
 
 export async function processPoster(fields, { tmdbClient, fileExists, readFile }) {
@@ -246,7 +276,7 @@ async function main() {
   try {
     let result;
     if (issueLabel === "add") {
-      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "tags", "poster", "link"]);
+      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "new_audio_language", "new_subs_language", "tags", "poster", "link"]);
       result = await processAdd(fields, {
         qualities,
         groups,
@@ -264,7 +294,7 @@ async function main() {
         readFile: (p) => readFileSync(p, "utf8"),
       });
     } else {
-      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "season", "tags"]);
+      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "new_audio_language", "new_subs_language", "season", "tags"]);
       result = processFix(fields, {
         qualities,
         groups,
@@ -279,6 +309,9 @@ async function main() {
       unlinkSync(result.filePath);
     } else {
       writeFileSync(result.filePath, result.content);
+    }
+    if (result.languagesChanged) {
+      writeFileSync("languages.yaml", dump(languages));
     }
 
     const messages = {
