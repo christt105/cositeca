@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { load } from "js-yaml";
 import {
@@ -22,6 +22,20 @@ const tmdb = createTmdbClient(apiKey, { cache: tmdbCache });
 
 const seasonNameOverrides = { all: "Serie completa" };
 
+function backdropUrl(path) {
+  return path ? `https://image.tmdb.org/t/p/w780${path}` : null;
+}
+
+function baseDetail(info) {
+  return {
+    overview: info.overview || "",
+    tagline: info.tagline || "",
+    genres: (info.genres ?? []).map((g) => g.name),
+    backdrop: backdropUrl(info.backdrop_path),
+    voteAverage: info.vote_average ?? null,
+  };
+}
+
 async function buildMovieEntry(id, data) {
   const info = await tmdb.getMovie(id);
   const links = data.links.map((entry) => {
@@ -35,7 +49,7 @@ async function buildMovieEntry(id, data) {
       link: entry.link,
     };
   });
-  return {
+  const entry = {
     type: "movie",
     tmdb: info.id,
     imdb: info.imdb_id ?? null,
@@ -46,6 +60,8 @@ async function buildMovieEntry(id, data) {
     qualities: dedupeQualities(links.map((l) => l.quality)),
     links,
   };
+  const detail = { ...baseDetail(info), runtime: info.runtime || null };
+  return { entry, detail };
 }
 
 async function buildSeriesEntry(id, data) {
@@ -63,6 +79,8 @@ async function buildSeriesEntry(id, data) {
     const result = {
       name: seasonData.name,
       poster: tmdb.posterUrl(seasonData.poster_path) ?? seriesPoster,
+      episodeCount: seasonData.episodes?.length ?? null,
+      airDate: seasonData.air_date || null,
     };
     seasonCache.set(season, result);
     return result;
@@ -85,7 +103,7 @@ async function buildSeriesEntry(id, data) {
     });
   }
 
-  return {
+  const entry = {
     type: "series",
     tmdb: info.id,
     imdb: externalIds.imdb_id ?? null,
@@ -96,6 +114,16 @@ async function buildSeriesEntry(id, data) {
     qualities: dedupeQualities(links.map((l) => l.quality)),
     links,
   };
+  const seasons = {};
+  for (const [season, { episodeCount, airDate }] of seasonCache) {
+    seasons[season] = { episodeCount, airDate };
+  }
+  const detail = {
+    ...baseDetail(info),
+    numberOfSeasons: info.number_of_seasons ?? null,
+    seasons,
+  };
+  return { entry, detail };
 }
 
 function dedupeQualities(list) {
@@ -142,8 +170,8 @@ async function main() {
       const path = `${type}/${filename}`;
       const data = load(readFileSync(path, "utf8"));
       try {
-        const entry = await builder(id, data);
-        entries.push({ entry, addedAt: addedTimestamps.get(path) ?? now });
+        const { entry, detail } = await builder(id, data);
+        entries.push({ entry, detail, addedAt: addedTimestamps.get(path) ?? now });
       } catch (err) {
         console.warn(`skipping ${path}: ${err.message}`);
       }
@@ -154,10 +182,19 @@ async function main() {
     return a.entry.title.localeCompare(b.entry.title, "es");
   });
   const catalog = entries.map((e) => e.entry);
-  mkdirSync("site", { recursive: true });
-  writeFileSync("site/catalog.json", JSON.stringify(catalog, null, 2));
+  rmSync("site/titles", { recursive: true, force: true });
+  mkdirSync("site/titles", { recursive: true });
+  for (const { entry, detail } of entries) {
+    writeFileSync(
+      `site/titles/${entry.type}-${entry.tmdb}.json`,
+      JSON.stringify(detail)
+    );
+  }
+  writeFileSync("site/catalog.json", JSON.stringify(catalog));
   saveTmdbCache(cachePath, tmdbCache);
-  console.log(`build: wrote ${catalog.length} titles to site/catalog.json`);
+  console.log(
+    `build: wrote ${catalog.length} titles to site/catalog.json and site/titles/`
+  );
 }
 
 await main();
