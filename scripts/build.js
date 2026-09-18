@@ -70,19 +70,31 @@ async function buildSeriesEntry(id, data) {
   const externalIds = await tmdb.getTvExternalIds(id);
   const seasonCache = new Map();
   const seriesPoster = data.poster ?? tmdb.posterUrl(info.poster_path);
+  const seasonPosters = data.seasonPosters ?? {};
 
   async function seasonInfo(season) {
+    const manualPoster = seasonPosters[season];
     if (season === "all") {
-      return { name: seasonNameOverrides.all, poster: seriesPoster };
+      return { name: seasonNameOverrides.all, poster: manualPoster ?? seriesPoster };
     }
     if (seasonCache.has(season)) return seasonCache.get(season);
-    const seasonData = await tmdb.getTvSeason(id, season);
-    const result = {
-      name: seasonData.name,
-      poster: tmdb.posterUrl(seasonData.poster_path) ?? seriesPoster,
-      episodeCount: seasonData.episodes?.length ?? null,
-      airDate: seasonData.air_date || null,
-    };
+    let result;
+    try {
+      const seasonData = await tmdb.getTvSeason(id, season);
+      result = {
+        name: seasonData.name,
+        poster: manualPoster ?? tmdb.posterUrl(seasonData.poster_path) ?? seriesPoster,
+        episodeCount: seasonData.episodes?.length ?? null,
+        airDate: seasonData.air_date || null,
+      };
+    } catch {
+      result = {
+        name: `Temporada ${season}`,
+        poster: manualPoster ?? seriesPoster,
+        episodeCount: null,
+        airDate: null,
+      };
+    }
     seasonCache.set(season, result);
     return result;
   }

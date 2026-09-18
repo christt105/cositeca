@@ -120,6 +120,26 @@ export function validatePoster(poster) {
   }
 }
 
+export function validateSeasonPosters(seasonPosters, type) {
+  if (seasonPosters === undefined) return;
+  if (type !== "series") {
+    throw new ValidationError("seasonPosters is not allowed for movie entries");
+  }
+  if (typeof seasonPosters !== "object" || seasonPosters === null || Array.isArray(seasonPosters)) {
+    throw new ValidationError("seasonPosters must be a mapping of season to poster URL");
+  }
+  for (const [season, poster] of Object.entries(seasonPosters)) {
+    if (season !== "all" && !/^\d+$/.test(season)) {
+      throw new ValidationError(
+        `seasonPosters key must be "all" or an integer >= 0, got ${JSON.stringify(season)}`
+      );
+    }
+    if (typeof poster !== "string" || poster.trim() === "") {
+      throw new ValidationError(`seasonPosters["${season}"] must be a non-empty string`);
+    }
+  }
+}
+
 export function validateLinkEntry(entry, { type, qualities, groups, languages }) {
   if (typeof entry !== "object" || entry === null) {
     throw new ValidationError("each link entry must be an object");
@@ -153,6 +173,7 @@ export function validateTitleFile(type, filename, data, { qualities, groups, lan
   }
   validatePoster(data.poster);
   const entryType = type === "movies" ? "movie" : "series";
+  validateSeasonPosters(data.seasonPosters, entryType);
   for (const entry of data.links) {
     validateLinkEntry(entry, { type: entryType, qualities, groups, languages });
   }

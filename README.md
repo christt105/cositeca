@@ -45,8 +45,12 @@ GitHub only prefills `input` fields from the query string, not dropdowns).
 ```yaml
 title: Some title          # informational only, the site uses the TMDB title
 poster: https://example.com/poster.jpg  # optional, overrides the TMDB poster
+seasonPosters:              # series only, optional: per-season poster override
+  1: https://example.com/season1.jpg  # key matches a `season` value below
+  all: https://example.com/complete.jpg
 links:
-  - season: 1               # series only: integer >= 0 (0 = specials) or "all"
+  - season: 1               # series only: integer >= 0 (0 = specials), "all", or any
+                             # other number, does not need to exist in TMDB
     quality: 1080p           # required, must be one of qualities.yaml
     audio: [Castellano]      # optional, values from languages.yaml audio
     subs: [Castellano]       # optional, values from languages.yaml subs
@@ -62,7 +66,10 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
 - `audio` and `subs`, if present, are arrays of strings listed in
   `languages.yaml`, without duplicates. Language goes here, not in `tags`.
 - `season` is required under `series/` (integer >= 0 or the string `all`) and
-  forbidden under `movies/`.
+  forbidden under `movies/`. It does not need to match a season TMDB knows
+  about: if `build` can't find it there, the season falls back to a
+  "Temporada N" name and the poster described below, instead of dropping
+  the whole title.
 - `link` must match `^https://t\.me/c/(\d+)/(?:(\d+)/)?(\d+)$`. The captured
   group id must exist in `groups.yaml`. Invite links (`t.me/+...`,
   `joinchat`, or anything not starting with `https://t.me/c/`) are rejected.
@@ -71,6 +78,10 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
   of the TMDB poster. The add issue form has an optional Portada field for
   it; the bot writes it at the top of the file (and replaces an existing
   one).
+- `seasonPosters`, series only, optional: a map from a `season` value (same
+  number or `"all"` used in `links`) to a poster URL. Checked before the
+  TMDB season poster, and used as the fallback when TMDB has no poster for
+  that season or the season doesn't exist there at all.
 
 ## TMDB
 
