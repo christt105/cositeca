@@ -27,6 +27,39 @@ body:
       description: "Solo series: número de temporada, 0 para especiales, all para la serie completa"
     validations:
       required: false
+  - type: dropdown
+    id: audio
+    attributes:
+      label: Audio
+      description: Opcional, idiomas de audio que trae el archivo
+      multiple: true
+      options:
+        - Castellano
+        - Latino
+        - Inglés
+        - Japonés
+        - Francés
+        - Catalán
+        - VO
+    validations:
+      required: false
+  - type: dropdown
+    id: subs
+    attributes:
+      label: Subtítulos
+      description: Opcional, idiomas de subtítulos que trae el archivo
+      multiple: true
+      options:
+        - Castellano
+        - Latino
+        - Inglés
+        - Japonés
+        - Francés
+        - Catalán
+        - VO
+        - Forzados
+    validations:
+      required: false
   - type: input
     id: tags
     attributes:

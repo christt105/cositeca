@@ -91,6 +91,25 @@ export function validateTags(tags) {
   }
 }
 
+export function validateLanguages(values, field, allowed) {
+  if (values === undefined) return;
+  if (!Array.isArray(values) || !values.every((v) => typeof v === "string")) {
+    throw new ValidationError(`${field} must be an array of strings`);
+  }
+  const seen = new Set();
+  for (const value of values) {
+    if (!allowed.includes(value)) {
+      throw new ValidationError(
+        `${field} "${value}" is not one of: ${allowed.join(", ")}`
+      );
+    }
+    if (seen.has(value)) {
+      throw new ValidationError(`${field} has duplicate value "${value}"`);
+    }
+    seen.add(value);
+  }
+}
+
 export function validatePoster(poster) {
   if (poster === undefined) return;
   if (typeof poster !== "string" || poster.trim() === "") {
@@ -98,7 +117,7 @@ export function validatePoster(poster) {
   }
 }
 
-export function validateLinkEntry(entry, { type, qualities, groups }) {
+export function validateLinkEntry(entry, { type, qualities, groups, languages }) {
   if (typeof entry !== "object" || entry === null) {
     throw new ValidationError("each link entry must be an object");
   }
@@ -107,6 +126,8 @@ export function validateLinkEntry(entry, { type, qualities, groups }) {
     throw new ValidationError("quality is required");
   }
   validateQuality(entry.quality, qualities);
+  validateLanguages(entry.audio, "audio", languages.audio);
+  validateLanguages(entry.subs, "subs", languages.subs);
   validateTags(entry.tags);
   const { groupId } = parseTelegramLink(entry.link);
   if (!Object.prototype.hasOwnProperty.call(groups, groupId)) {
@@ -114,7 +135,7 @@ export function validateLinkEntry(entry, { type, qualities, groups }) {
   }
 }
 
-export function validateTitleFile(type, filename, data, { qualities, groups }) {
+export function validateTitleFile(type, filename, data, { qualities, groups, languages }) {
   if (!FILENAME_RE.test(filename)) {
     throw new ValidationError(`invalid filename: ${filename}`);
   }
@@ -130,7 +151,7 @@ export function validateTitleFile(type, filename, data, { qualities, groups }) {
   validatePoster(data.poster);
   const entryType = type === "movies" ? "movie" : "series";
   for (const entry of data.links) {
-    validateLinkEntry(entry, { type: entryType, qualities, groups });
+    validateLinkEntry(entry, { type: entryType, qualities, groups, languages });
   }
 }
 

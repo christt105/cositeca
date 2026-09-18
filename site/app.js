@@ -4,6 +4,8 @@ const grid = document.getElementById("grid");
 const empty = document.getElementById("empty");
 const searchInput = document.getElementById("search");
 const filtersEl = document.getElementById("filters");
+const audioFilter = document.getElementById("audio-filter");
+const subsFilter = document.getElementById("subs-filter");
 const modal = document.getElementById("modal");
 const modalBody = document.getElementById("modal-body");
 
@@ -54,11 +56,33 @@ function matchesSearch(item, query) {
   );
 }
 
+function hasLanguage(item, field, value) {
+  if (!value) return true;
+  return item.links.some((link) => (link[field] || []).includes(value));
+}
+
+function fillLanguageFilter(select, field) {
+  const values = new Set();
+  for (const item of catalog) {
+    for (const link of item.links) {
+      for (const value of link[field] || []) values.add(value);
+    }
+  }
+  for (const value of [...values].sort((a, b) => a.localeCompare(b, "es"))) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }
+}
+
 function render() {
   const query = searchInput.value.trim();
   const items = catalog.filter(
     (item) =>
       (activeFilter === "all" || item.type === activeFilter) &&
+      hasLanguage(item, "audio", audioFilter.value) &&
+      hasLanguage(item, "subs", subsFilter.value) &&
       matchesSearch(item, query)
   );
 
@@ -102,14 +126,19 @@ function seasonSortKey(season) {
   return season;
 }
 
-function renderVersionRow(link) {
-  const tags = (link.tags || [])
-    .map((t) => `<span class="chip">${t}</span>`)
+function renderChips(values, className) {
+  return (values || [])
+    .map((v) => `<span class="chip ${className}">${v}</span>`)
     .join("");
+}
+
+function renderVersionRow(link) {
   return `
     <div class="version-row">
       <span class="badge">${link.quality}</span>
-      ${tags}
+      ${renderChips(link.audio, "chip--audio")}
+      ${renderChips(link.subs, "chip--subs")}
+      ${renderChips(link.tags, "")}
       <span class="chip">${link.group}</span>
       <a class="btn" href="${link.link}" target="_blank" rel="noopener">Abrir en Telegram</a>
     </div>
@@ -184,10 +213,14 @@ filtersEl.addEventListener("click", (e) => {
 });
 
 searchInput.addEventListener("input", render);
+audioFilter.addEventListener("change", render);
+subsFilter.addEventListener("change", render);
 
 fetch("catalog.json", { cache: "no-cache" })
   .then((res) => res.json())
   .then((data) => {
     catalog = data;
+    fillLanguageFilter(audioFilter, "audio");
+    fillLanguageFilter(subsFilter, "subs");
     render();
   });

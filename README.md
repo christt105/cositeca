@@ -16,6 +16,9 @@ A small static catalog of Telegram links to movies and series, enriched with
 
 `groups.yaml` maps an internal Telegram group id to a display name.
 `qualities.yaml` is the closed, ordered list of valid quality values.
+`languages.yaml` holds the closed lists of valid `audio` and `subs` values
+(the `subs` list is the audio one plus `Forzados`). Add a language there and
+it becomes valid everywhere; the issue forms list the same options by hand.
 
 ```yaml
 title: Some title          # informational only, the site uses the TMDB title
@@ -23,7 +26,9 @@ poster: https://example.com/poster.jpg  # optional, overrides the TMDB poster
 links:
   - season: 1               # series only: integer >= 0 (0 = specials) or "all"
     quality: 1080p           # required, must be one of qualities.yaml
-    tags: [Latino]           # optional, free-form strings
+    audio: [Castellano]      # optional, values from languages.yaml audio
+    subs: [Castellano]       # optional, values from languages.yaml subs
+    tags: [HDR]              # optional, free-form strings
     link: https://t.me/c/2142474284/1036/81222
 ```
 
@@ -32,6 +37,8 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
 
 - Filename matches `^\d+\.yaml$` and lives under `movies/` or `series/`.
 - `links` is non-empty. `quality` must be listed in `qualities.yaml`.
+- `audio` and `subs`, if present, are arrays of strings listed in
+  `languages.yaml`, without duplicates. Language goes here, not in `tags`.
 - `season` is required under `series/` (integer >= 0 or the string `all`) and
   forbidden under `movies/`.
 - `link` must match `^https://t\.me/c/(\d+)/(?:(\d+)/)?(\d+)$`. The captured
