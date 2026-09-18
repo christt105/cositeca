@@ -316,8 +316,10 @@ function renderForm() {
     </div>
     <div class="add__label">Audio</div>
     <div class="checks">${checkboxGroup("audio", meta.languages.audio)}</div>
+    <input id="add-audio-other" class="search" type="text" maxlength="30" placeholder="Otro idioma de audio (opcional)">
     <div class="add__label">Subtítulos</div>
     <div class="checks">${checkboxGroup("subs", meta.languages.subs)}</div>
+    <input id="add-subs-other" class="search" type="text" maxlength="30" placeholder="Otro idioma de subtítulos (opcional)">
     <label class="add__label" for="add-tags">Etiquetas (opcional, separadas por comas)</label>
     <input id="add-tags" class="search" type="text" placeholder="HDR, REMUX">
     <button type="submit" class="btn btn--add add__submit">Aceptar</button>
@@ -372,6 +374,8 @@ function buildIssueUrl() {
     season: selected.type === "tv" ? $("add-season").value : "",
     audio: checked("audio").join(", "),
     subs: checked("subs").join(", "),
+    new_audio_language: $("add-audio-other").value.trim(),
+    new_subs_language: $("add-subs-other").value.trim(),
     tags: $("add-tags").value.trim(),
     poster: posterChoice ?? "",
     link,

@@ -15,7 +15,10 @@
 5. Si quieres, elige otra portada entre las que salen.
 6. Rellena el link de Telegram del paso 2, la calidad, la temporada (solo
    series), el audio y los subtítulos que trae el archivo, y etiquetas si
-   hace falta (por ejemplo `HDR`).
+   hace falta (por ejemplo `HDR`). Si el audio o los subtítulos están en un
+   idioma que no aparece en la lista, escríbelo en el campo "Otro idioma de
+   audio/subtítulos": se añade a la lista para todo el mundo, no hace falta
+   pedírselo a nadie.
 7. Pulsa "Aceptar". Se abre un formulario de Issue en GitHub con todo
    relleno: revísalo y pulsa "Submit new issue".
 8. Un robot revisa la petición en un par de minutos: si todo está bien,
