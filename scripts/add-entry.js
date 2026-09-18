@@ -215,6 +215,20 @@ function collectExistingLinks() {
   return links;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function findRunId(gh, workflow, branch) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await sleep(1500);
+    const runs = JSON.parse(gh([
+      "run", "list", "--workflow", workflow, "--branch", branch,
+      "--limit", "1", "--json", "databaseId",
+    ]));
+    if (runs.length) return runs[0].databaseId;
+  }
+  throw new Error(`${workflow} did not start on ${branch}`);
+}
+
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
@@ -311,6 +325,9 @@ async function main() {
     git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
     git(["push", "-u", "origin", branch]);
 
+    gh(["workflow", "run", "validate.yml", "--ref", branch]);
+    const runId = await findRunId(gh, "validate.yml", branch);
+
     const prUrl = gh([
       "pr", "create", "--base", "main", "--head", branch,
       "--title", subject, "--body", `Closes #${issueNumber}`,
@@ -318,7 +335,7 @@ async function main() {
     const prNumber = prUrl.split("/").pop();
 
     try {
-      gh(["pr", "checks", prNumber, "--watch"]);
+      gh(["run", "watch", String(runId), "--exit-status"]);
     } catch {
       gh([
         "issue", "comment", issueNumber, "--body",
