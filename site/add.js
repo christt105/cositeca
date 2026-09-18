@@ -283,6 +283,7 @@ function seasonOptions() {
     options.push({ value: s.season_number, label: `${s.name} (${s.season_number})` });
   }
   options.push({ value: "all", label: "Serie completa (all)" });
+  options.push({ value: "other", label: "Otra (escribir número)" });
   return options;
 }
 
@@ -312,6 +313,7 @@ function renderForm() {
         <select id="add-season" class="filter-select">
           ${seasonOptions().map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}
         </select>
+        <input id="add-season-other" class="search hidden" type="text" inputmode="numeric" pattern="\\d+" placeholder="Número de temporada">
       </div>` : ""}
     </div>
     <div class="add__label">Audio</div>
@@ -336,8 +338,12 @@ function renderForm() {
   });
   if (isTv) {
     const seasonSelect = $("add-season");
+    const seasonOther = $("add-season-other");
     const first = selected.seasons.find((s) => s.season_number > 0);
     if (first) seasonSelect.value = String(first.season_number);
+    seasonSelect.addEventListener("change", () => {
+      seasonOther.classList.toggle("hidden", seasonSelect.value !== "other");
+    });
   }
   updateOutcome();
 }
@@ -366,10 +372,13 @@ function buildIssueUrl() {
   const error = validateLink(link);
   $("add-link-error").textContent = error;
   if (!link || error) return null;
+  const seasonValue = selected.type === "tv"
+    ? ($("add-season").value === "other" ? $("add-season-other").value.trim() : $("add-season").value)
+    : "";
   const params = {
     tmdb: tmdbUrl(toSiteType(selected.type), selected.id),
     quality: $("add-quality").value,
-    season: selected.type === "tv" ? $("add-season").value : "",
+    season: seasonValue,
     audio: checked("audio").join(", "),
     subs: checked("subs").join(", "),
     tags: $("add-tags").value.trim(),
