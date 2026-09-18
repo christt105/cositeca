@@ -93,6 +93,9 @@ export default {
     if (!target) {
       return json({ error: "not found" }, 404, cors);
     }
+    if (!env.TMDB_API_KEY) {
+      return json({ error: "TMDB_API_KEY secret is not set" }, 500, cors);
+    }
 
     if (env.RATE_LIMITER) {
       const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
