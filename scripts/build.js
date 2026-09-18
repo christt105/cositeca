@@ -135,7 +135,7 @@ function dedupeQualities(list) {
 function getAddedTimestamps() {
   const output = execFileSync(
     "git",
-    ["log", "--diff-filter=A", "--name-only", "--format=%x00%at"],
+    ["log", "--no-renames", "--diff-filter=A", "--name-only", "--format=%x00%at"],
     { maxBuffer: 1024 * 1024 * 200 }
   ).toString();
   const timestamps = new Map();
