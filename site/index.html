@@ -20,11 +20,15 @@
     <div class="header__tools" id="header-tools">
       <input id="search" class="search" type="search" placeholder="Busca por título, id de TMDB o IMDB">
       <div class="filters" id="filters">
-        <button class="filter-btn is-active" data-filter="all">Todo</button>
-        <button class="filter-btn" data-filter="movie">Películas</button>
-        <button class="filter-btn" data-filter="series">Series</button>
-        <select id="audio-filter" class="filter-select" aria-label="Audio"><option value="">Audio</option></select>
-        <select id="subs-filter" class="filter-select" aria-label="Subtítulos"><option value="">Subtítulos</option></select>
+        <button class="filter-toggle is-active" data-type="movie" aria-pressed="true">Películas</button>
+        <button class="filter-toggle is-active" data-type="series" aria-pressed="true">Series</button>
+        <button class="filter-panel-toggle" id="filter-panel-toggle" type="button" aria-label="Filtrar por género o etiqueta" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+        </button>
+        <div class="filter-panel hidden" id="filter-panel">
+          <select id="genre-filter" class="filter-select" aria-label="Género"><option value="">Género</option></select>
+          <select id="tag-filter" class="filter-select" aria-label="Etiqueta"><option value="">Etiqueta</option></select>
+        </div>
       </div>
     </div>
     <a class="btn btn--add" id="add-btn" href="#/add">Añadir</a>

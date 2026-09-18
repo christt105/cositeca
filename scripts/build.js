@@ -59,6 +59,7 @@ async function buildMovieEntry(id, data) {
     year: info.release_date ? info.release_date.slice(0, 4) : null,
     poster: data.poster ?? tmdb.posterUrl(info.poster_path),
     qualities: dedupeQualities(links.map((l) => l.quality)),
+    genres: (info.genres ?? []).map((g) => g.name),
     links,
   };
   const detail = { ...baseDetail(info), runtime: info.runtime || null };
@@ -125,6 +126,7 @@ async function buildSeriesEntry(id, data) {
     year: info.first_air_date ? info.first_air_date.slice(0, 4) : null,
     poster: seriesPoster,
     qualities: dedupeQualities(links.map((l) => l.quality)),
+    genres: (info.genres ?? []).map((g) => g.name),
     links,
   };
   const seasons = {};
