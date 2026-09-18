@@ -370,3 +370,14 @@ fetch("catalog.json", { cache: "no-cache" })
     fillLanguageFilter(subsFilter, "subs");
     route();
   });
+
+if ("serviceWorker" in navigator) {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("sw.js");
+}
