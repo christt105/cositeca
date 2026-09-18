@@ -344,7 +344,7 @@ async function main() {
       return;
     }
 
-    gh(["pr", "merge", prNumber, "--squash", "--delete-branch", "--admin"]);
+    gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
     gh(["workflow", "run", "deploy.yml"]);
     gh([
       "issue", "comment", issueNumber, "--body",
