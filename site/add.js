@@ -29,7 +29,7 @@ async function proxyGet(path) {
   return res.json();
 }
 
-async function loadMeta() {
+export async function loadMeta() {
   if (meta) return meta;
   const res = await fetch("meta.json", { cache: "no-cache" });
   meta = await res.json();
@@ -226,25 +226,27 @@ function renderExisting(item) {
   `;
 }
 
-async function loadPosters(type, id) {
-  const box = $("add-posters");
+export function hasProxy() {
+  return Boolean(proxyUrl());
+}
+
+export async function renderPosterPicker(box, type, id, defaultPoster, onChoose) {
   let data;
   try {
     data = await proxyGet(`/images?type=${type}&id=${id}`);
   } catch {
-    return;
+    return false;
   }
-  if (!selected || selected.type !== type || selected.id !== id) return;
   const posters = (data.posters || [])
     .filter((p) => [null, "es", "en"].includes(p.iso_639_1))
     .sort((a, b) => b.vote_count - a.vote_count || b.vote_average - a.vote_average)
     .slice(0, 12);
-  if (posters.length === 0) return;
+  if (posters.length === 0) return false;
   box.innerHTML = `
     <div class="add__label">Portada (la primera es la que TMDB usa por defecto)</div>
     <div class="posters">
       <button type="button" class="poster is-active" data-poster="">
-        <img src="${esc(selected.poster)}" alt="" loading="lazy"><span>Por defecto</span>
+        <img src="${esc(defaultPoster)}" alt="" loading="lazy"><span>Por defecto</span>
       </button>
       ${posters
         .map((p) => `
@@ -256,11 +258,21 @@ async function loadPosters(type, id) {
   `;
   for (const btn of box.querySelectorAll(".poster")) {
     btn.addEventListener("click", () => {
-      posterChoice = btn.dataset.poster || null;
       for (const b of box.querySelectorAll(".poster")) b.classList.toggle("is-active", b === btn);
-      updateOutcome();
+      onChoose(btn.dataset.poster || null);
     });
   }
+  return true;
+}
+
+async function loadPosters(type, id) {
+  const box = $("add-posters");
+  const current = selected;
+  await renderPosterPicker(box, type, id, current.poster, (choice) => {
+    posterChoice = choice;
+    updateOutcome();
+  });
+  if (selected !== current) box.innerHTML = "";
 }
 
 function seasonOptions() {
@@ -274,9 +286,9 @@ function seasonOptions() {
   return options;
 }
 
-function checkboxGroup(name, values) {
+export function checkboxGroup(name, values, checkedValues = []) {
   return values
-    .map((v) => `<label class="check"><input type="checkbox" name="${name}" value="${esc(v)}"> ${esc(v)}</label>`)
+    .map((v) => `<label class="check"><input type="checkbox" name="${name}" value="${esc(v)}"${checkedValues.includes(v) ? " checked" : ""}> ${esc(v)}</label>`)
     .join("");
 }
 
@@ -330,7 +342,7 @@ function renderForm() {
   updateOutcome();
 }
 
-function validateLink(link) {
+export function validateLink(link) {
   if (!link) return "";
   if (link.includes("t.me/+") || link.includes("joinchat")) {
     return "Los links de invitación no valen, tiene que ser el link de un mensaje.";

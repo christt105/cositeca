@@ -368,6 +368,44 @@ body {
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z'/%3E%3C/svg%3E");
 }
 
+.version-row__tools {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.edit {
+  padding: 0.5rem 0.75rem 0.75rem;
+  margin: -0.2rem 0 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.edit__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.edit__actions .add__submit { margin-top: 0; }
+
+.btn--ghost {
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font: inherit;
+  font-weight: 600;
+}
+
 .version-row .btn {
   margin-left: auto;
   font-size: 0.8rem;

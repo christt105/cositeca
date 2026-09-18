@@ -1,6 +1,7 @@
 import { tmdbUrl, imdbUrl, issueUrl } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
 import { renderAdd } from "./add.js";
+import { bindTitleEditing } from "./edit.js";
 
 const headerTools = document.getElementById("header-tools");
 const searchInput = document.getElementById("search");
@@ -163,33 +164,38 @@ function seasonSortKey(season) {
   return season === "all" ? Infinity : season;
 }
 
-function renderVersionRow(link) {
+function renderVersionRow(link, index) {
   return `
-    <div class="version-row">
+    <div class="version-row" data-index="${index}">
       <span class="badge">${esc(link.quality)}</span>
       ${renderChips(link.audio, "chip--audio")}
       ${renderChips(link.subs, "chip--subs")}
       ${renderChips(link.tags, "")}
       <span class="chip">${esc(link.group)}</span>
+      <span class="version-row__tools">
+        <button type="button" class="link-btn" data-edit>Editar</button>
+        <button type="button" class="link-btn" data-delete>Borrar</button>
+      </span>
       <a class="btn" href="${esc(link.link)}" target="_blank" rel="noopener">Abrir en Telegram</a>
     </div>
   `;
 }
 
 function renderVersions(item) {
+  const rows = item.links.map((link, index) => ({ link, index }));
   if (item.type === "movie") {
-    return item.links.map(renderVersionRow).join("");
+    return rows.map(({ link, index }) => renderVersionRow(link, index)).join("");
   }
   const seasons = new Map();
-  for (const link of item.links) {
-    if (!seasons.has(link.season)) seasons.set(link.season, []);
-    seasons.get(link.season).push(link);
+  for (const row of rows) {
+    if (!seasons.has(row.link.season)) seasons.set(row.link.season, []);
+    seasons.get(row.link.season).push(row);
   }
   return [...seasons.keys()]
     .sort((a, b) => seasonSortKey(a) - seasonSortKey(b))
     .map((season) => {
       const links = seasons.get(season);
-      const { seasonName, seasonPoster } = links[0];
+      const { seasonName, seasonPoster } = links[0].link;
       return `
         <div class="season-group">
           <div class="season-group__title">
@@ -197,7 +203,7 @@ function renderVersions(item) {
             <span>${esc(seasonName)}</span>
             <span class="season-group__meta" data-season="${esc(season)}"></span>
           </div>
-          ${links.map(renderVersionRow).join("")}
+          ${links.map(({ link, index }) => renderVersionRow(link, index)).join("")}
         </div>
       `;
     })
@@ -230,11 +236,14 @@ function renderTitle(item) {
     </div>
     <div class="title__detail" id="title-detail"></div>
     <div class="title__versions">${renderVersions(item)}</div>
+    <div id="title-poster-picker" class="hidden"></div>
     <div class="title__actions">
       <a class="btn" href="#/add?tmdb=${encodeURIComponent(tmdb)}">Añadir versión</a>
-      <a class="btn" href="${issueUrl("fix.yml", { tmdb })}" target="_blank" rel="noopener">Corregir un link</a>
+      <a class="btn" id="poster-btn" href="#">Cambiar portada</a>
     </div>
+    <div id="title-notice"></div>
   `;
+  bindTitleEditing(views.title, item);
   document.getElementById("back-btn").addEventListener("click", (e) => {
     if (!visitedWithinApp) return;
     e.preventDefault();

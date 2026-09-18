@@ -1,0 +1,21 @@
+name: Cambiar la portada
+description: Usa otra portada para un título, o vuelve a la de TMDB
+title: "[poster] "
+labels: ["entry", "poster"]
+body:
+  - type: input
+    id: tmdb
+    attributes:
+      label: URL de TMDB o id de IMDB
+      description: URL de TMDB de la película o serie, o id de IMDB tt...
+      placeholder: https://www.themoviedb.org/movie/550-fight-club
+    validations:
+      required: true
+  - type: input
+    id: poster
+    attributes:
+      label: Portada
+      description: URL de la portada nueva. Déjalo vacío para volver a la portada de TMDB
+      placeholder: https://image.tmdb.org/t/p/w342/....jpg
+    validations:
+      required: false

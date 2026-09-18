@@ -28,7 +28,20 @@ GitHub vacío: necesitarás buscar la película o serie en
 [themoviedb.org](https://www.themoviedb.org) y pegar la URL de su página
 (por ejemplo `https://www.themoviedb.org/movie/550-fight-club`).
 
-## Corregir o borrar un link
+## Editar o borrar un link
 
-Desde la página del título, pulsa "Corregir un link" y rellena el link
-actual y, si quieres cambiarlo, el link nuevo (déjalo vacío para borrarlo).
+En la página del título, cada link tiene "Editar" y "Borrar":
+
+- **Editar** abre un formulario con los valores actuales (link, calidad,
+  temporada, audio, subtítulos, etiquetas). Cambia lo que haga falta y pulsa
+  "Aceptar": se abre la Issue de GitHub ya rellena, revísala y envíala.
+- **Borrar** pide confirmación y abre la Issue de borrado ya rellena.
+
+## Cambiar la portada
+
+En la página del título, pulsa "Cambiar portada", elige una de las que
+salen (la primera es la de TMDB, que es la que se usa si no eliges otra) y
+pulsa "Aceptar": se abre la Issue ya rellena.
+
+En los tres casos el robot aplica el cambio en un par de minutos y la web
+tarda otros pocos en actualizarse.
