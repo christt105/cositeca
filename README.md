@@ -8,7 +8,14 @@ A small static catalog of Telegram links to movies and series, enriched with
 - Each title is a YAML file under `movies/<tmdbId>.yaml` or `series/<tmdbId>.yaml`.
 - `npm run validate` checks every file against the rules below.
 - `npm run build` fetches metadata from TMDB and writes `site/catalog.json`.
-- `site/` is a static, dependency-free page that reads `catalog.json`.
+- `site/` is a static, dependency-free page that reads `catalog.json`. A
+  hash router in `app.js` serves `#/` (grid with search and filters, both
+  kept in the hash so back/forward and shared URLs restore them),
+  `#/movie/<tmdbId>` and `#/series/<tmdbId>` (one page per title, which
+  also fetches `titles/<type>-<id>.json` when it exists) and `#/add`.
+- `site/rules.js` holds the regexes and URL helpers shared by the page and
+  the Node scripts (`scripts/lib.js` imports it), so `site/` needs no build
+  step and the rules exist once.
 - New entries and fixes come in through a GitHub Issue form, processed by
   `.github/workflows/add-entry.yml`, which commits directly to `main`.
 

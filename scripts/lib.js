@@ -1,10 +1,13 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import {
+  TELEGRAM_LINK_RE,
+  TMDB_URL_RE,
+  TMDB_ID_RE,
+  IMDB_ID_RE,
+} from "../site/rules.js";
 
-export const TELEGRAM_LINK_RE = /^https:\/\/t\.me\/c\/(\d+)\/(?:(\d+)\/)?(\d+)$/;
-export const TMDB_URL_RE = /^https?:\/\/(?:www\.)?themoviedb\.org\/(movie|tv)\/(\d+)(?:-.*)?$/;
-export const TMDB_ID_RE = /^tmdb:(\d+)$/;
-export const IMDB_ID_RE = /^tt\d+$/;
+export { TELEGRAM_LINK_RE, TMDB_URL_RE, TMDB_ID_RE, IMDB_ID_RE };
 export const FILENAME_RE = /^\d+\.yaml$/;
 
 export class ValidationError extends Error {}
