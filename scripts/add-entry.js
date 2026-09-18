@@ -310,9 +310,12 @@ async function main() {
     git(["push"]);
     gh(["workflow", "run", "deploy.yml"]);
     gh([
-      "issue", "close", issueNumber, "--comment",
+      "issue", "comment", issueNumber, "--body",
       `${close} La web se actualiza en un par de minutos.`,
     ]);
+    if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
+      gh(["issue", "close", issueNumber]);
+    }
   } catch (err) {
     if (err instanceof ValidationError) {
       gh(["issue", "comment", issueNumber, "--body", err.message]);
