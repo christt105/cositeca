@@ -17,7 +17,11 @@ A small static catalog of Telegram links to movies and series, enriched with
   hash router in `app.js` serves `#/` (grid with search and filters, both
   kept in the hash so back/forward and shared URLs restore them),
   `#/movie/<tmdbId>` and `#/series/<tmdbId>` (one page per title, which
-  also fetches `titles/<type>-<id>.json` when it exists) and `#/add`.
+  also fetches `titles/<type>-<id>.json` when it exists) and `#/add`
+  (`add.js`: TMDB search through the proxy, poster picker and a form that
+  opens the add issue with every field prefilled by query string; it reads
+  `site/meta.json`, written by `build`, for the quality, language and group
+  lists). It accepts `#/add?q=<search>` and `#/add?tmdb=<url>`.
 - `site/rules.js` holds the regexes and URL helpers shared by the page and
   the Node scripts (`scripts/lib.js` imports it), so `site/` needs no build
   step and the rules exist once.
@@ -58,7 +62,9 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
   `joinchat`, or anything not starting with `https://t.me/c/`) are rejected.
 - The same `link` cannot appear twice in the whole repository.
 - `poster`, if present, must be a non-empty string and is used as-is instead
-  of the TMDB poster.
+  of the TMDB poster. The add issue form has an optional Portada field for
+  it; the bot writes it at the top of the file (and replaces an existing
+  one).
 
 ## TMDB
 

@@ -7,6 +7,7 @@ import {
   resolveTmdbTarget,
   validateLinkEntry,
   validateQuality,
+  validatePoster,
   createTmdbClient,
 } from "./lib.js";
 
@@ -17,6 +18,7 @@ export const FIELD_LABELS = {
   audio: "Audio",
   subs: "Subtítulos",
   tags: "Etiquetas",
+  poster: "Portada",
   link: "Link de Telegram",
   old_link: "Link actual",
   new_link: "Link nuevo",
@@ -87,6 +89,9 @@ export async function processAdd(fields, { qualities, groups, languages, tmdbCli
     : await tmdbClient.getTv(target.id);
   const title = target.type === "movie" ? info.title : info.name;
 
+  const poster = fields.poster?.trim() || undefined;
+  validatePoster(poster);
+
   const filePath = `${dir}/${target.id}.yaml`;
   let data;
   if (fileExists(filePath)) {
@@ -94,6 +99,9 @@ export async function processAdd(fields, { qualities, groups, languages, tmdbCli
     data.links.push(entry);
   } else {
     data = { title, links: [entry] };
+  }
+  if (poster) {
+    data = { title: data.title, poster, links: data.links };
   }
 
   return { filePath, content: dump(data), title, quality: fields.quality, action: "write" };
@@ -214,7 +222,7 @@ async function main() {
   try {
     let result;
     if (issueLabel === "add") {
-      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "tags", "link"]);
+      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "tags", "poster", "link"]);
       result = await processAdd(fields, {
         qualities,
         groups,
