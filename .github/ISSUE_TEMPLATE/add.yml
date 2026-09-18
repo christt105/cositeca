@@ -43,6 +43,22 @@ body:
     validations:
       required: false
   - type: input
+    id: new_audio_language
+    attributes:
+      label: Nuevo idioma (audio)
+      description: Opcional, solo si el audio está en un idioma que no aparece en la lista de arriba. Se añade a la lista para todo el mundo.
+      placeholder: Portugués
+    validations:
+      required: false
+  - type: input
+    id: new_subs_language
+    attributes:
+      label: Nuevo idioma (subtítulos)
+      description: Opcional, solo si los subtítulos están en un idioma que no aparece en la lista de arriba. Se añade a la lista para todo el mundo.
+      placeholder: Coreano
+    validations:
+      required: false
+  - type: input
     id: tags
     attributes:
       label: Etiquetas

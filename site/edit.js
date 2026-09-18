@@ -37,8 +37,10 @@ function renderEditForm(row, item, link, meta) {
     </div>
     <div class="add__label">Audio</div>
     <div class="checks">${checkboxGroup("audio", meta.languages.audio, link.audio || [])}</div>
+    <input name="new_audio_language" class="search" type="text" maxlength="30" placeholder="Otro idioma de audio (opcional)">
     <div class="add__label">Subtítulos</div>
     <div class="checks">${checkboxGroup("subs", meta.languages.subs, link.subs || [])}</div>
+    <input name="new_subs_language" class="search" type="text" maxlength="30" placeholder="Otro idioma de subtítulos (opcional)">
     <label class="add__label">Etiquetas (separadas por comas)</label>
     <input name="tags" class="search" type="text" value="${esc((link.tags || []).join(", "))}">
     <div class="edit__actions">
@@ -64,6 +66,8 @@ function renderEditForm(row, item, link, meta) {
       season: isSeries ? form.elements.season.value.trim() : "",
       audio: audio.join(", "),
       subs: subs.join(", "),
+      new_audio_language: form.elements.new_audio_language.value.trim(),
+      new_subs_language: form.elements.new_subs_language.value.trim(),
       tags: tags || ((link.tags || []).length ? "-" : ""),
     };
     openIssue(row.closest(".title"), issueUrl("fix.yml", params));

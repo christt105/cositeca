@@ -113,6 +113,21 @@ export function validateLanguages(values, field, allowed) {
   }
 }
 
+const MAX_NEW_LANGUAGE_LENGTH = 30;
+
+export function sanitizeNewLanguage(raw, existing) {
+  if (raw === undefined || raw === null) return undefined;
+  const value = raw.trim().replace(/\s+/g, " ");
+  if (value === "") return undefined;
+  if (value.length > MAX_NEW_LANGUAGE_LENGTH) {
+    throw new ValidationError(
+      `new language is too long (max ${MAX_NEW_LANGUAGE_LENGTH} characters): ${value}`
+    );
+  }
+  const existingMatch = existing.find((v) => v.toLowerCase() === value.toLowerCase());
+  return existingMatch ?? value;
+}
+
 export function validatePoster(poster) {
   if (poster === undefined) return;
   if (typeof poster !== "string" || poster.trim() === "") {
