@@ -11,13 +11,12 @@ body:
       placeholder: https://www.themoviedb.org/movie/550-fight-club
     validations:
       required: true
-  - type: dropdown
+  - type: input
     id: quality
     attributes:
       label: Calidad
-      options:
-        - 1080p
-        - 4K
+      description: "1080p o 4K"
+      placeholder: 1080p
     validations:
       required: true
   - type: input
@@ -27,37 +26,20 @@ body:
       description: "Solo series: número de temporada, 0 para especiales, all para la serie completa"
     validations:
       required: false
-  - type: dropdown
+  - type: input
     id: audio
     attributes:
       label: Audio
-      description: Opcional, idiomas de audio que trae el archivo
-      multiple: true
-      options:
-        - Castellano
-        - Latino
-        - Inglés
-        - Japonés
-        - Francés
-        - Catalán
-        - VO
+      description: "Opcional, idiomas de audio separados por comas: Castellano, Latino, Inglés, Japonés, Francés, Catalán, VO"
+      placeholder: Castellano, Inglés
     validations:
       required: false
-  - type: dropdown
+  - type: input
     id: subs
     attributes:
       label: Subtítulos
-      description: Opcional, idiomas de subtítulos que trae el archivo
-      multiple: true
-      options:
-        - Castellano
-        - Latino
-        - Inglés
-        - Japonés
-        - Francés
-        - Catalán
-        - VO
-        - Forzados
+      description: "Opcional, idiomas de subtítulos separados por comas: Castellano, Latino, Inglés, Japonés, Francés, Catalán, VO, Forzados"
+      placeholder: Castellano, Forzados
     validations:
       required: false
   - type: input
