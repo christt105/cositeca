@@ -335,9 +335,9 @@ function renderForm() {
     const fields = buildAddFields();
     if (!fields) return;
     if (isBatchMode()) {
-      enqueue({ type: "add", fields, label: addLabel(fields) });
+      const replaced = enqueue({ type: "add", fields, label: addLabel(fields) });
       $("add-outcome").innerHTML = `
-        <p class="add__hint">Añadido a la cola (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>
+        <p class="add__hint">${replaced ? "Cambio actualizado en la cola" : "Añadido a la cola"} (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>
       `;
       return;
     }

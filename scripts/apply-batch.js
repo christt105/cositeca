@@ -8,8 +8,10 @@ import {
   processPoster,
   describeResult,
   collectExistingLinks,
+  checkAntiSpam,
 } from "./add-entry.js";
 
+export const MAX_OPERATIONS = 50;
 const OPERATIONS_LABEL = "Operaciones (JSON)";
 const REQUIRED_FIELDS = {
   add: ["tmdb", "quality", "link"],
@@ -37,6 +39,9 @@ export function parseOperations(text) {
   }
   if (!Array.isArray(ops) || ops.length === 0) {
     throw new ValidationError("las operaciones deben ser un array no vacío");
+  }
+  if (ops.length > MAX_OPERATIONS) {
+    throw new ValidationError(`demasiadas operaciones en un solo lote (${ops.length}), el máximo es ${MAX_OPERATIONS}`);
   }
   return ops;
 }
@@ -106,6 +111,7 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
       skipped.push(`operación ${i + 1}: ${invalidReason}`);
       continue;
     }
+    const languagesBefore = structuredClone(languages);
     try {
       let result;
       if (op.type === "add") {
@@ -133,6 +139,7 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
       applied.push(`operación ${i + 1}: ${close}`);
     } catch (err) {
       if (err instanceof ValidationError) {
+        for (const list of Object.keys(languagesBefore)) languages[list] = languagesBefore[list];
         skipped.push(`operación ${i + 1}: ${err.message}`);
       } else {
         throw err;
@@ -159,9 +166,21 @@ async function findRunId(gh, workflow, branch) {
 
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
+  const issueAuthor = process.env.ISSUE_AUTHOR;
   const body = process.env.ISSUE_BODY || "";
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
   const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
+
+  const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));
+  const openCount = JSON.parse(gh([
+    "issue", "list", "--label", "entry-batch", "--state", "open",
+    "--author", issueAuthor, "--json", "number",
+  ])).length;
+  const spamReason = checkAntiSpam(user.created_at, openCount);
+  if (spamReason) {
+    gh(["issue", "comment", issueNumber, "--body", spamReason]);
+    return;
+  }
 
   try {
     const json = extractOperationsJson(body);

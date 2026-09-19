@@ -12,9 +12,10 @@ function openIssue(view, url) {
 }
 
 function queueOperation(view, type, fields, label) {
-  enqueue({ type, fields, label });
+  const replaced = enqueue({ type, fields, label });
   const box = view.querySelector("#title-notice");
-  box.innerHTML = `<p class="add__hint">Añadido a la cola (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>`;
+  const verb = replaced ? "Cambio actualizado en la cola" : "Añadido a la cola";
+  box.innerHTML = `<p class="add__hint">${verb} (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>`;
 }
 
 function checked(form, name) {

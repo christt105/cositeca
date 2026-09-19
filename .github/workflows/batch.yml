@@ -28,5 +28,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_BODY: ${{ github.event.issue.body }}
