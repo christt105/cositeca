@@ -31,6 +31,11 @@
         </div>
       </div>
     </div>
+    <label class="batch-toggle" id="batch-toggle">
+      <input type="checkbox" id="batch-mode-checkbox">
+      Modo lote
+    </label>
+    <a class="btn btn--ghost batch-badge hidden" id="batch-badge" href="#/batch">Cola (0)</a>
     <a class="btn btn--add" id="add-btn" href="#/add">Añadir</a>
   </header>
 
@@ -46,6 +51,8 @@
     <section id="view-title" class="view title hidden"></section>
 
     <section id="view-add" class="view add hidden"></section>
+
+    <section id="view-batch" class="view hidden"></section>
 
     <section id="view-missing" class="view empty hidden">
       <p>Ese título no está en la Cositeca.</p>

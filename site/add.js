@@ -8,6 +8,7 @@ import {
   issueUrl,
 } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
 const view = document.getElementById("view-add");
 const IMG = "https://image.tmdb.org/t/p";
@@ -331,8 +332,16 @@ function renderForm() {
   form.addEventListener("change", updateOutcome);
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const url = buildIssueUrl();
-    if (!url) return;
+    const fields = buildAddFields();
+    if (!fields) return;
+    if (isBatchMode()) {
+      enqueue({ type: "add", fields, label: addLabel(fields) });
+      $("add-outcome").innerHTML = `
+        <p class="add__hint">Añadido a la cola (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>
+      `;
+      return;
+    }
+    const url = issueUrl("add.yml", fields);
     window.open(url, "_blank", "noopener");
     $("add-outcome").innerHTML = `
       <p class="add__hint">Se abre el formulario de GitHub con todo relleno: revisa los campos y pulsa Submit. Si no se ha abierto, <a href="${esc(url)}" target="_blank" rel="noopener">ábrelo desde aquí</a>.</p>
@@ -369,7 +378,7 @@ function checked(name) {
   return [...view.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
 }
 
-function buildIssueUrl() {
+function buildAddFields() {
   const link = $("add-link").value.trim();
   const error = validateLink(link);
   $("add-link-error").textContent = error;
@@ -377,7 +386,7 @@ function buildIssueUrl() {
   const seasonValue = selected.type === "tv"
     ? ($("add-season").value === "other" ? $("add-season-other").value.trim() : $("add-season").value)
     : "";
-  const params = {
+  return {
     tmdb: tmdbUrl(toSiteType(selected.type), selected.id),
     quality: $("add-quality").value,
     season: seasonValue,
@@ -389,11 +398,15 @@ function buildIssueUrl() {
     poster: posterChoice ?? "",
     link,
   };
-  return issueUrl("add.yml", params);
+}
+
+function addLabel(fields) {
+  const season = fields.season ? ` T${fields.season}` : "";
+  return `${selected.title} — añadir ${fields.quality}${season}`;
 }
 
 function updateOutcome() {
-  const url = buildIssueUrl();
+  const fields = buildAddFields();
   const submit = view.querySelector(".add__submit");
-  if (submit) submit.disabled = !url;
+  if (submit) submit.disabled = !fields;
 }

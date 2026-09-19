@@ -647,3 +647,30 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.batch-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.batch-toggle input { margin: 0; }
+
+.batch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.4rem;
+}
+
+.batch-row__label {
+  font-size: 0.9rem;
+}

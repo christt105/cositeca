@@ -48,3 +48,21 @@ pulsa "Aceptar": se abre la Issue ya rellena.
 
 En los tres casos el robot aplica el cambio en un par de minutos y la web
 tarda otros pocos en actualizarse.
+
+## Hacer varios cambios de golpe (modo lote)
+
+Si vas a añadir o editar varias cosas seguidas, activa "Modo lote" en la
+cabecera de la web. A partir de ahí, cada "Aceptar" (añadir, editar,
+borrar, cambiar portada) no abre una Issue nueva: se guarda en una cola. El
+contador "Cola (N)" de la cabecera te lleva al resumen, donde puedes
+revisar todo lo acumulado, quitar algo si te has equivocado o vaciarlo
+entero.
+
+Al pulsar "Confirmar" se abre un único Issue de GitHub con todos los
+cambios; revísalo y pulsa "Submit new issue". El robot los aplica todos
+juntos en un único PR, pero a diferencia de un cambio suelto, **ese PR no
+se mergea solo**: alguien tiene que revisarlo a mano antes de que se
+publique.
+
+Desactiva "Modo lote" para volver al comportamiento normal (una Issue por
+cambio, al momento).

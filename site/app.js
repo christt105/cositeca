@@ -2,6 +2,8 @@ import { tmdbUrl, imdbUrl, issueUrl } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
 import { renderAdd } from "./add.js";
 import { bindTitleEditing } from "./edit.js";
+import { renderBatch } from "./batch.js";
+import { getQueue, isBatchMode, setBatchMode, onQueueChange } from "./queue.js";
 
 const headerTools = document.getElementById("header-tools");
 const searchInput = document.getElementById("search");
@@ -17,8 +19,11 @@ const views = {
   grid: document.getElementById("view-grid"),
   title: document.getElementById("view-title"),
   add: document.getElementById("view-add"),
+  batch: document.getElementById("view-batch"),
   missing: document.getElementById("view-missing"),
 };
+const batchModeCheckbox = document.getElementById("batch-mode-checkbox");
+const batchBadge = document.getElementById("batch-badge");
 
 let catalog = [];
 let byKey = new Map();
@@ -54,6 +59,7 @@ function parseRoute() {
   const parts = path.split("/").filter(Boolean);
   if (parts.length === 0) return { view: "grid", params };
   if (parts[0] === "add") return { view: "add", params };
+  if (parts[0] === "batch") return { view: "batch" };
   if ((parts[0] === "movie" || parts[0] === "series") && /^\d+$/.test(parts[1] ?? "")) {
     return { view: "title", type: parts[0], id: Number(parts[1]) };
   }
@@ -323,6 +329,13 @@ function route() {
     window.scrollTo(0, 0);
     return;
   }
+  if (r.view === "batch") {
+    document.title = "Cola de cambios · Cositeca";
+    showView("batch");
+    renderBatch();
+    window.scrollTo(0, 0);
+    return;
+  }
   if (r.view === "title") {
     const item = byKey.get(`${r.type}/${r.id}`);
     if (!item) {
@@ -378,6 +391,19 @@ window.addEventListener("hashchange", () => {
   visitedWithinApp = true;
   route();
 });
+
+function refreshBatchUi() {
+  batchModeCheckbox.checked = isBatchMode();
+  const count = getQueue().length;
+  batchBadge.textContent = `Cola (${count})`;
+  batchBadge.classList.toggle("hidden", count === 0);
+}
+
+batchModeCheckbox.addEventListener("change", () => {
+  setBatchMode(batchModeCheckbox.checked);
+});
+onQueueChange(refreshBatchUi);
+refreshBatchUi();
 
 fetch("catalog.json", { cache: "no-cache" })
   .then((res) => res.json())
