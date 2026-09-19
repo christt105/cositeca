@@ -4,6 +4,7 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+from lang_parser import parse_languages
 from parse_movies import clean_title
 from tmdb_client import search_with_retry
 
@@ -66,10 +67,11 @@ def match_tmdb(parsed):
 
 def process(item):
     parsed = parse_line(item["text"])
-    row = {"id": item["id"], "raw": item["text"].split("\n", 1)[0].strip()}
+    row = {"id": item["id"], "date": item.get("date", ""), "raw": item["text"].split("\n", 1)[0].strip()}
     if parsed is None:
         row.update({"status": "unparsed"})
         return row
+    audio, subs = parse_languages(item["text"])
     row.update(
         {
             "title": parsed["title"],
@@ -77,6 +79,8 @@ def process(item):
             "season": parsed["season"],
             "season_note": parsed["season_note"],
             "quality": parsed["quality"],
+            "audio": ",".join(audio),
+            "subs": ",".join(subs),
         }
     )
     try:
@@ -100,7 +104,7 @@ def main(in_path, out_path):
     with ThreadPoolExecutor(max_workers=6) as pool:
         rows = list(pool.map(process, items))
     fields = [
-        "id", "raw", "title", "year", "season", "season_note", "quality", "status",
+        "id", "date", "raw", "title", "year", "season", "season_note", "quality", "audio", "subs", "status",
         "result_count", "used_cleaned_title", "tmdb_id", "tmdb_title", "tmdb_year",
     ]
     with open(out_path, "w", newline="") as f:
