@@ -6,6 +6,8 @@ import {
   processAdd,
   processFix,
   processPoster,
+  processReidentify,
+  resultFiles,
   describeResult,
   collectExistingLinks,
   checkAntiSpam,
@@ -17,6 +19,7 @@ const REQUIRED_FIELDS = {
   add: ["tmdb", "quality", "link"],
   fix: ["old_link"],
   poster: ["tmdb"],
+  reidentify: ["tmdb", "new_tmdb"],
 };
 
 export function extractOperationsJson(issueBody) {
@@ -124,14 +127,21 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
           qualities, groups, languages, existingLinks,
           readdir: fs.readdir, readFile: fs.readFile,
         });
+      } else if (op.type === "reidentify") {
+        result = await processReidentify(op, {
+          qualities, groups, languages, tmdbClient,
+          fileExists: fs.fileExists, readFile: fs.readFile,
+        });
       } else {
         result = await processPoster(op, {
           tmdbClient, fileExists: fs.fileExists, readFile: fs.readFile,
         });
       }
 
-      if (result.action === "delete") fs.remove(result.filePath);
-      else fs.write(result.filePath, result.content);
+      for (const { filePath, content } of resultFiles(result)) {
+        if (content === null) fs.remove(filePath);
+        else fs.write(filePath, content);
+      }
       if (result.languagesChanged) languagesChanged = true;
 
       updateExistingLinks(op, result, existingLinks);
