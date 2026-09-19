@@ -1,0 +1,44 @@
+name: Reidentificar un link o una entrada
+description: Mueve un link, o todos los de una película o serie, a otro título de TMDB
+title: "[reidentify] "
+labels: ["entry", "reidentify"]
+body:
+  - type: input
+    id: tmdb
+    attributes:
+      label: URL de TMDB o id de IMDB
+      description: URL de TMDB de la película o serie donde están ahora los links
+      placeholder: https://www.themoviedb.org/movie/550-fight-club
+    validations:
+      required: true
+  - type: input
+    id: new_tmdb
+    attributes:
+      label: Nueva URL de TMDB o id de IMDB
+      description: URL de TMDB de la película o serie a la que pasan los links
+      placeholder: https://www.themoviedb.org/tv/1396-breaking-bad
+    validations:
+      required: true
+  - type: input
+    id: old_link
+    attributes:
+      label: Link actual
+      description: Opcional. Si lo rellenas se mueve solo ese link, si no se mueven todos los de la entrada
+      placeholder: https://t.me/c/2229558644/12345
+    validations:
+      required: false
+  - type: input
+    id: season
+    attributes:
+      label: Temporada
+      description: "Opcional. Obligatoria al pasar de película a serie. Si el destino es una serie, sustituye la temporada de los links movidos (número, 0 para especiales, all para la serie completa)"
+    validations:
+      required: false
+  - type: input
+    id: poster
+    attributes:
+      label: Portada
+      description: Opcional, portada para el título nuevo. La portada del título antiguo no se arrastra
+      placeholder: https://image.tmdb.org/t/p/w342/....jpg
+    validations:
+      required: false

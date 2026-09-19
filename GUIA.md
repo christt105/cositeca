@@ -46,14 +46,26 @@ En la página del título, pulsa "Cambiar portada", elige una de las que
 salen (la primera es la de TMDB, que es la que se usa si no eliges otra) y
 pulsa "Aceptar": se abre la Issue ya rellena.
 
-En los tres casos el robot aplica el cambio en un par de minutos y la web
+## Reidentificar (mover a otra película o serie)
+
+Si un link, o todos los de una entrada, se han asignado al título
+equivocado, en la página del título pulsa "Reidentificar" junto al link
+(mueve solo ese) o en los botones de abajo (mueve todos los links de la
+entrada). Busca el título correcto, y si hace falta elige la temporada:
+al pasar de película a serie es obligatoria, al pasar de serie a película
+se quita, y de serie a serie cada link conserva la suya salvo que elijas
+otra. La portada del título antiguo no se traslada; si quieres una para el
+nuevo, elígela en el mismo formulario. Si el título antiguo se queda sin
+links, desaparece.
+
+En todos los casos el robot aplica el cambio en un par de minutos y la web
 tarda otros pocos en actualizarse.
 
 ## Hacer varios cambios de golpe (modo lote)
 
 Si vas a añadir o editar varias cosas seguidas, activa "Modo lote" en la
 cabecera de la web. A partir de ahí, cada "Aceptar" (añadir, editar,
-borrar, cambiar portada) no abre una Issue nueva: se guarda en una cola. El
+borrar, cambiar portada, reidentificar) no abre una Issue nueva: se guarda en una cola. El
 contador "Cola (N)" de la cabecera te lleva al resumen, donde puedes
 revisar todo lo acumulado, quitar algo si te has equivocado o vaciarlo
 entero.

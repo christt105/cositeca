@@ -25,6 +25,7 @@ export const FIELD_LABELS = {
   link: "Link de Telegram",
   old_link: "Link actual",
   new_link: "Link nuevo",
+  new_tmdb: "Nueva URL de TMDB o id de IMDB",
 };
 
 export function parseIssueBody(body, fieldIds) {
@@ -222,6 +223,106 @@ export async function processPoster(fields, { tmdbClient, fileExists, readFile }
   return { filePath, content: dump(data), title: current.title, action: "write" };
 }
 
+function withPoster(data, poster) {
+  const { title, seasonPosters, links } = data;
+  return {
+    title,
+    ...(poster ? { poster } : {}),
+    ...(seasonPosters ? { seasonPosters } : {}),
+    links,
+  };
+}
+
+function pruneSeasonPosters(seasonPosters, links) {
+  if (!seasonPosters) return undefined;
+  const used = new Set(links.map((l) => String(l.season)));
+  const kept = Object.fromEntries(Object.entries(seasonPosters).filter(([season]) => used.has(season)));
+  return Object.keys(kept).length ? kept : undefined;
+}
+
+export async function processReidentify(fields, { qualities, groups, languages, tmdbClient, fileExists, readFile }) {
+  const source = await resolveTmdbTarget(parseTmdbInput(fields.tmdb), tmdbClient);
+  const sourcePath = `${source.type === "movie" ? "movies" : "series"}/${source.id}.yaml`;
+  if (!fileExists(sourcePath)) {
+    throw new ValidationError(`title not found in the catalog: ${sourcePath}`);
+  }
+
+  const season = parseSeasonField(fields.season);
+  const descriptor = parseTmdbInput(fields.new_tmdb, { hasSeason: season !== undefined || source.type === "tv" });
+  const target = await resolveTmdbTarget(descriptor, tmdbClient);
+  const kind = target.type === "movie" ? "movie" : "series";
+  const targetPath = `${target.type === "movie" ? "movies" : "series"}/${target.id}.yaml`;
+  if (targetPath === sourcePath) {
+    throw new ValidationError("the new title is the same as the current one");
+  }
+  if (kind === "movie" && season !== undefined) {
+    throw new ValidationError("season is not allowed when moving to a movie");
+  }
+
+  const sourceData = load(readFile(sourcePath));
+  const oldEntry = fields.old_link
+    ? sourceData.links.find((l) => l.link === fields.old_link)
+    : undefined;
+  if (fields.old_link && !oldEntry) {
+    throw new ValidationError(`link not found in ${sourcePath}: ${fields.old_link}`);
+  }
+  const toMove = oldEntry ? [oldEntry] : sourceData.links;
+  const remaining = sourceData.links.filter((l) => !toMove.includes(l));
+
+  const moved = toMove.map((entry) => {
+    const next = { ...entry };
+    if (kind === "movie") {
+      delete next.season;
+    } else if (season !== undefined) {
+      next.season = season;
+    } else if (next.season === undefined) {
+      throw new ValidationError("season is required when moving a movie to a series");
+    }
+    const ordered = orderEntry(next);
+    validateLinkEntry(ordered, { type: kind, qualities, groups, languages });
+    return ordered;
+  });
+
+  const info = target.type === "movie"
+    ? await tmdbClient.getMovie(target.id)
+    : await tmdbClient.getTv(target.id);
+  const title = target.type === "movie" ? info.title : info.name;
+
+  const poster = fields.poster?.trim() || undefined;
+  validatePoster(poster);
+  const existing = fileExists(targetPath) ? load(readFile(targetPath)) : { title, links: [] };
+  const targetData = withPoster(
+    { ...existing, links: [...existing.links, ...moved] },
+    poster ?? existing.poster
+  );
+
+  const files = [{ filePath: targetPath, content: dump(targetData) }];
+  if (remaining.length === 0) {
+    files.push({ filePath: sourcePath, content: null });
+  } else {
+    const sourceOut = { ...sourceData, links: remaining };
+    const seasonPosters = pruneSeasonPosters(sourceData.seasonPosters, remaining);
+    delete sourceOut.seasonPosters;
+    files.push({
+      filePath: sourcePath,
+      content: dump(withPoster({ ...sourceOut, seasonPosters }, sourceData.poster)),
+    });
+  }
+
+  return {
+    files,
+    title: sourceData.title,
+    targetTitle: title,
+    count: moved.length,
+    languagesChanged: false,
+  };
+}
+
+export function resultFiles(result) {
+  if (result.files) return result.files;
+  return [{ filePath: result.filePath, content: result.action === "delete" ? null : result.content }];
+}
+
 export function describeResult(issueLabel, result) {
   const messages = {
     add: {
@@ -240,6 +341,10 @@ export function describeResult(issueLabel, result) {
     poster: {
       subject: `fix: update poster for ${result.title}`,
       close: `Portada actualizada para ${result.title}.`,
+    },
+    reidentify: {
+      subject: `fix: move ${result.count} link(s) from ${result.title} to ${result.targetTitle}`,
+      close: `Movido(s) ${result.count} link(s) de ${result.title} a ${result.targetTitle}.`,
     },
   };
   return messages[issueLabel];
@@ -286,7 +391,7 @@ async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
   const issueLabels = (process.env.ISSUE_LABELS || "").split(",");
-  const issueLabel = ["fix", "poster"].find((l) => issueLabels.includes(l)) ?? "add";
+  const issueLabel = ["fix", "poster", "reidentify"].find((l) => issueLabels.includes(l)) ?? "add";
   const body = process.env.ISSUE_BODY;
 
   const qualities = load(readFileSync("qualities.yaml", "utf8"));
@@ -330,6 +435,16 @@ async function main() {
         fileExists: existsSync,
         readFile: (p) => readFileSync(p, "utf8"),
       });
+    } else if (issueLabel === "reidentify") {
+      const fields = parseIssueBody(body, ["tmdb", "new_tmdb", "old_link", "season", "poster"]);
+      result = await processReidentify(fields, {
+        qualities,
+        groups,
+        languages,
+        tmdbClient,
+        fileExists: existsSync,
+        readFile: (p) => readFileSync(p, "utf8"),
+      });
     } else {
       const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "new_audio_language", "new_subs_language", "season", "tags"]);
       result = processFix(fields, {
@@ -342,10 +457,9 @@ async function main() {
       });
     }
 
-    if (result.action === "delete") {
-      unlinkSync(result.filePath);
-    } else {
-      writeFileSync(result.filePath, result.content);
+    for (const { filePath, content } of resultFiles(result)) {
+      if (content === null) unlinkSync(filePath);
+      else writeFileSync(filePath, content);
     }
     if (result.languagesChanged) {
       writeFileSync("languages.yaml", dump(languages));
