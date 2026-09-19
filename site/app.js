@@ -191,6 +191,7 @@ function renderVersionRow(link, index) {
       <span class="chip">${esc(link.group)}</span>
       <span class="version-row__tools">
         <button type="button" class="link-btn" data-edit>Editar</button>
+        <button type="button" class="link-btn" data-reid>Reidentificar</button>
         <button type="button" class="link-btn" data-delete>Borrar</button>
       </span>
       <a class="btn" href="${esc(link.link)}" target="_blank" rel="noopener">Abrir en Telegram</a>
@@ -257,7 +258,9 @@ function renderTitle(item) {
     <div class="title__actions">
       <a class="btn" href="#/add?tmdb=${encodeURIComponent(tmdb)}">Añadir versión</a>
       <a class="btn" id="poster-btn" href="#">Cambiar portada</a>
+      <button type="button" class="btn" id="reid-btn">Reidentificar</button>
     </div>
+    <div id="title-reid"></div>
     <div id="title-notice"></div>
   `;
   bindTitleEditing(views.title, item);

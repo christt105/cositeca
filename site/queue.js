@@ -26,6 +26,7 @@ export function getQueue() {
 
 function targetKey({ type, fields }) {
   if (type === "fix") return `fix:${fields.old_link}`;
+  if (type === "reidentify") return `reidentify:${fields.old_link || fields.tmdb}`;
   if (type === "poster") return `poster:${fields.tmdb}`;
   return `add:${fields.link}`;
 }

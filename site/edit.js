@@ -1,6 +1,7 @@
 import { tmdbUrl, issueUrl } from "./rules.js";
 import { esc } from "./ui.js";
 import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
+import { openReidentify } from "./reid.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
 const SENT_NOTICE = "Se abre el formulario de GitHub con todo relleno: revísalo y pulsa Submit. Los cambios tardan unos minutos en verse.";
@@ -91,11 +92,29 @@ function renderEditForm(row, item, link, meta) {
 
 export async function bindTitleEditing(view, item) {
   const meta = await loadMeta();
+  const submitReidentify = (fields, label) => {
+    if (isBatchMode()) {
+      queueOperation(view, "reidentify", fields, label);
+    } else {
+      openIssue(view, issueUrl("reidentify.yml", fields));
+    }
+  };
+  view.querySelector("#reid-btn").addEventListener("click", () => {
+    view.querySelectorAll(".edit").forEach((f) => f.remove());
+    openReidentify(view.querySelector("#title-reid"), item, null, submitReidentify);
+  });
   for (const row of view.querySelectorAll(".version-row[data-index]")) {
     const link = item.links[Number(row.dataset.index)];
     row.querySelector("[data-edit]").addEventListener("click", () => {
       view.querySelectorAll(".edit").forEach((f) => f.remove());
       renderEditForm(row, item, link, meta);
+    });
+    row.querySelector("[data-reid]").addEventListener("click", () => {
+      view.querySelectorAll(".edit").forEach((f) => f.remove());
+      const slot = document.createElement("div");
+      slot.className = "edit";
+      row.after(slot);
+      openReidentify(slot, item, link, submitReidentify);
     });
     row.querySelector("[data-delete]").addEventListener("click", () => {
       const what = item.type === "series" ? `${link.seasonName} ${link.quality}` : link.quality;

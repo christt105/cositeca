@@ -24,7 +24,7 @@ function proxyUrl() {
   return TMDB_PROXY_URL || localStorage.getItem("tmdbProxy") || "";
 }
 
-async function proxyGet(path) {
+export async function proxyGet(path) {
   const res = await fetch(`${proxyUrl()}${path}`);
   if (!res.ok) throw new Error(`proxy ${path} failed: ${res.status}`);
   return res.json();
@@ -45,12 +45,12 @@ function toSiteType(type) {
   return type === "tv" ? "series" : "movie";
 }
 
-function yearOf(result) {
+export function yearOf(result) {
   const date = result.release_date || result.first_air_date || "";
   return date.slice(0, 4);
 }
 
-function nameOf(result) {
+export function nameOf(result) {
   return result.title || result.name || "";
 }
 
@@ -276,11 +276,11 @@ async function loadPosters(type, id) {
   if (selected !== current) box.innerHTML = "";
 }
 
-function seasonOptions() {
-  const numbers = new Set(selected.seasons.map((s) => s.season_number));
+export function seasonOptions(seasons) {
+  const numbers = new Set(seasons.map((s) => s.season_number));
   const options = [];
   if (!numbers.has(0)) options.push({ value: 0, label: "Especiales (0)" });
-  for (const s of [...selected.seasons].sort((a, b) => a.season_number - b.season_number)) {
+  for (const s of [...seasons].sort((a, b) => a.season_number - b.season_number)) {
     options.push({ value: s.season_number, label: `${s.name} (${s.season_number})` });
   }
   options.push({ value: "all", label: "Serie completa (all)" });
@@ -312,7 +312,7 @@ function renderForm() {
       <div>
         <label class="add__label" for="add-season">Temporada</label>
         <select id="add-season" class="filter-select">
-          ${seasonOptions().map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}
+          ${seasonOptions(selected.seasons).map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}
         </select>
         <input id="add-season-other" class="search hidden" type="text" inputmode="numeric" pattern="\\d+" placeholder="Número de temporada">
       </div>` : ""}

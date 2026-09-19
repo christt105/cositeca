@@ -26,11 +26,21 @@ A small static catalog of Telegram links to movies and series, enriched with
   the Node scripts (`scripts/lib.js` imports it), so `site/` needs no build
   step and the rules exist once.
 - New entries, link fixes/deletions and poster changes come in through
-  GitHub Issue forms (`add.yml`, `fix.yml`, `poster.yml`, told apart by
+  GitHub Issue forms (`add.yml`, `fix.yml`, `poster.yml`, `reidentify.yml`, told apart by
   their `add`/`fix`/`poster` label), processed by
   `.github/workflows/add-entry.yml`, which commits directly to `main`. The
   title page and the add page open those forms with every field prefilled
   by query string, so users only review and submit.
+- `reidentify.yml` moves one link (`old_link`) or, if empty, every link of
+  the entry at `tmdb` to another title (`new_tmdb`), creating the target
+  file or appending to an existing one and deleting the source if it ends
+  up empty. Seasons: movie to series requires `season` (applied to every
+  moved link), series to movie drops it, series to series keeps each link's
+  own unless `season` overrides it. `poster` and `seasonPosters` describe
+  the old title, so they are never carried over; the optional `poster`
+  field sets one for the target. Moving a single link only prunes
+  `seasonPosters` entries for seasons with no links left. Batch mode
+  accepts it as an operation of type `reidentify`.
 
 ## Data format
 
