@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { load, dump } from "js-yaml";
 import {
   ValidationError,
@@ -514,6 +515,6 @@ async function main() {
   }
 }
 
-if (process.env.ISSUE_NUMBER) {
+if (process.env.ISSUE_NUMBER && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }
