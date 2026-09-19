@@ -515,6 +515,6 @@ async function main() {
   }
 }
 
-if (process.env.ISSUE_NUMBER && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.env.ISSUE_NUMBER && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }
