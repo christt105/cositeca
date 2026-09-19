@@ -222,6 +222,29 @@ export async function processPoster(fields, { tmdbClient, fileExists, readFile }
   return { filePath, content: dump(data), title: current.title, action: "write" };
 }
 
+export function describeResult(issueLabel, result) {
+  const messages = {
+    add: {
+      subject: `feat: add ${result.title} ${result.quality}`,
+      close: `Añadido: ${result.title} (${result.quality}).`,
+    },
+    fix: result.deleted
+      ? {
+        subject: `fix: remove link from ${result.title}`,
+        close: `Borrado el link de ${result.title} (${result.quality}).`,
+      }
+      : {
+        subject: `fix: update link for ${result.title}`,
+        close: `Actualizado el link de ${result.title} (${result.quality}).`,
+      },
+    poster: {
+      subject: `fix: update poster for ${result.title}`,
+      close: `Portada actualizada para ${result.title}.`,
+    },
+  };
+  return messages[issueLabel];
+}
+
 export function checkAntiSpam(createdAt, openEntryIssueCount) {
   const accountAgeDays = (Date.now() - new Date(createdAt).getTime()) / 86400000;
   if (accountAgeDays < 7) {
@@ -233,7 +256,7 @@ export function checkAntiSpam(createdAt, openEntryIssueCount) {
   return null;
 }
 
-function collectExistingLinks() {
+export function collectExistingLinks() {
   const links = new Set();
   for (const dir of ["movies", "series"]) {
     if (!existsSync(dir)) continue;
@@ -328,26 +351,7 @@ async function main() {
       writeFileSync("languages.yaml", dump(languages));
     }
 
-    const messages = {
-      add: {
-        subject: `feat: add ${result.title} ${result.quality}`,
-        close: `Añadido: ${result.title} (${result.quality}).`,
-      },
-      fix: result.deleted
-        ? {
-          subject: `fix: remove link from ${result.title}`,
-          close: `Borrado el link de ${result.title} (${result.quality}).`,
-        }
-        : {
-          subject: `fix: update link for ${result.title}`,
-          close: `Actualizado el link de ${result.title} (${result.quality}).`,
-        },
-      poster: {
-        subject: `fix: update poster for ${result.title}`,
-        close: `Portada actualizada para ${result.title}.`,
-      },
-    };
-    const { subject, close } = messages[issueLabel];
+    const { subject, close } = describeResult(issueLabel, result);
 
     const git = (args) => execFileSync("git", args, { encoding: "utf8" });
     const branch = `bot/entry-${issueNumber}`;
