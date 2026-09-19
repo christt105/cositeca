@@ -1,0 +1,20 @@
+name: Cambios en lote
+description: Aplica en bloque una lista de altas, ediciones y portadas generada desde la web
+title: "[batch] "
+labels: ["entry-batch"]
+body:
+  - type: textarea
+    id: operations
+    attributes:
+      label: Operaciones (JSON)
+      description: >-
+        Generado por la web (modo lote): no lo edites a mano salvo que sepas
+        lo que haces.
+      placeholder: |
+        [
+          {"type": "add", "tmdb": "https://www.themoviedb.org/movie/550-fight-club", "quality": "1080p", "link": "https://t.me/c/2229558644/12345"},
+          {"type": "poster", "tmdb": "https://www.themoviedb.org/movie/550-fight-club", "poster": "https://image.tmdb.org/t/p/w342/....jpg"}
+        ]
+      render: json
+    validations:
+      required: true

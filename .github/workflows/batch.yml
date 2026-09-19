@@ -1,0 +1,33 @@
+name: Batch
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+  pull-requests: write
+
+concurrency:
+  group: entry-batch
+  cancel-in-progress: false
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'entry-batch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: node scripts/apply-batch.js
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_BODY: ${{ github.event.issue.body }}

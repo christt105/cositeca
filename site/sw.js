@@ -6,6 +6,8 @@ const SHELL = [
   "app.js",
   "add.js",
   "edit.js",
+  "batch.js",
+  "queue.js",
   "ui.js",
   "rules.js",
   "manifest.webmanifest",

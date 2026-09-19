@@ -1,6 +1,7 @@
 import { tmdbUrl, issueUrl } from "./rules.js";
 import { esc } from "./ui.js";
 import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
+import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
 const SENT_NOTICE = "Se abre el formulario de GitHub con todo relleno: revísalo y pulsa Submit. Los cambios tardan unos minutos en verse.";
 
@@ -8,6 +9,13 @@ function openIssue(view, url) {
   window.open(url, "_blank", "noopener");
   const box = view.querySelector("#title-notice");
   box.innerHTML = `<p class="add__hint">${SENT_NOTICE} Si no se ha abierto, <a href="${esc(url)}" target="_blank" rel="noopener">ábrelo desde aquí</a>.</p>`;
+}
+
+function queueOperation(view, type, fields, label) {
+  const replaced = enqueue({ type, fields, label });
+  const box = view.querySelector("#title-notice");
+  const verb = replaced ? "Cambio actualizado en la cola" : "Añadido a la cola";
+  box.innerHTML = `<p class="add__hint">${verb} (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>`;
 }
 
 function checked(form, name) {
@@ -58,7 +66,7 @@ function renderEditForm(row, item, link, meta) {
     const audio = checked(form, "audio");
     const subs = checked(form, "subs");
     const tags = form.elements.tags.value.trim();
-    const params = {
+    const fields = {
       tmdb: tmdbUrl(item.type, item.tmdb),
       old_link: link.link,
       new_link: newLink,
@@ -70,7 +78,12 @@ function renderEditForm(row, item, link, meta) {
       new_subs_language: form.elements.new_subs_language.value.trim(),
       tags: tags || ((link.tags || []).length ? "-" : ""),
     };
-    openIssue(row.closest(".title"), issueUrl("fix.yml", params));
+    const view = row.closest(".title");
+    if (isBatchMode()) {
+      queueOperation(view, "fix", fields, `${item.title} — editar ${fields.quality}`);
+    } else {
+      openIssue(view, issueUrl("fix.yml", fields));
+    }
     form.remove();
   });
   row.after(form);
@@ -87,7 +100,12 @@ export async function bindTitleEditing(view, item) {
     row.querySelector("[data-delete]").addEventListener("click", () => {
       const what = item.type === "series" ? `${link.seasonName} ${link.quality}` : link.quality;
       if (!confirm(`¿Borrar el link ${what} de ${item.title}?`)) return;
-      openIssue(view, issueUrl("fix.yml", { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link }));
+      const fields = { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link };
+      if (isBatchMode()) {
+        queueOperation(view, "fix", fields, `${item.title} — borrar ${what}`);
+      } else {
+        openIssue(view, issueUrl("fix.yml", fields));
+      }
     });
   }
 
@@ -119,7 +137,12 @@ export async function bindTitleEditing(view, item) {
     actions.className = "edit__actions";
     actions.innerHTML = `<button type="button" class="btn add__submit">Aceptar</button>`;
     actions.querySelector("button").addEventListener("click", () => {
-      openIssue(view, issueUrl("poster.yml", { tmdb: tmdbUrl(item.type, item.tmdb), poster: choice ?? "" }));
+      const fields = { tmdb: tmdbUrl(item.type, item.tmdb), poster: choice ?? "" };
+      if (isBatchMode()) {
+        queueOperation(view, "poster", fields, `${item.title} — portada`);
+      } else {
+        openIssue(view, issueUrl("poster.yml", fields));
+      }
       picker.classList.add("hidden");
     });
     picker.append(actions);
