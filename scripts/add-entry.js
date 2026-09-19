@@ -247,7 +247,7 @@ export function describeResult(issueLabel, result) {
 
 export function checkAntiSpam(createdAt, openEntryIssueCount) {
   const accountAgeDays = (Date.now() - new Date(createdAt).getTime()) / 86400000;
-  if (accountAgeDays < 7) {
+  if (accountAgeDays < 1) {
     return "Cuenta demasiado nueva o demasiadas peticiones abiertas";
   }
   if (openEntryIssueCount > 3) {
