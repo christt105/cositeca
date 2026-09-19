@@ -1,7 +1,8 @@
 # Cositeca
 
-A small static catalog of Telegram links to movies and series, enriched with
-[TMDB](https://www.themoviedb.org/) metadata. Deployed on GitHub Pages.
+A small static index of links to messages in private Telegram groups,
+enriched with [TMDB](https://www.themoviedb.org/) metadata (titles, posters,
+synopses). Deployed on GitHub Pages.
 
 ## How it works
 
