@@ -94,6 +94,25 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
   TMDB season poster, and used as the fallback when TMDB has no poster for
   that season or the season doesn't exist there at all.
 
+## Tests
+
+`npm test` runs the unit tests in `test/` with the Node test runner
+(`node --test`, no extra dependencies). They cover the pure helpers of
+`scripts/lib.js` and `site/rules.js`, the issue body parsing, the four
+catalog operations (`add`, `fix`, `poster`, `reidentify`) against an
+injected in-memory file system, the batch overlay of `scripts/apply-batch.js`
+and the queue of `site/queue.js`. Nothing reaches the network, the real
+catalog or GitHub: `fetch` is stubbed and the batch tests work inside a
+temporary directory, so no TMDB key is needed.
+
+Run one file with `node --test test/operations-add.test.js`, or one case
+with `node --test --test-name-pattern "seasonPosters" test/*.test.js`.
+
+Test names that start with `known bug` or `known limitation` pin down
+behaviour that is wrong or surprising but still in place, so whoever fixes
+it only has to flip the assertion. The `test` job in `.github/workflows/validate.yml`
+runs `npm test` on every push and pull request, next to `npm run validate`.
+
 ## TMDB
 
 A minimal client in `scripts/lib.js` uses native `fetch`. If the API key

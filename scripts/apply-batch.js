@@ -59,7 +59,7 @@ function validOperation(op) {
   return null;
 }
 
-function makeOverlayFs() {
+export function makeOverlayFs() {
   const overlay = new Map();
   return {
     fileExists: (p) => (overlay.has(p) ? overlay.get(p) !== null : existsSync(p)),
