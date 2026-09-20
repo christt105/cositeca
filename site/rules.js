@@ -25,3 +25,23 @@ export function issueUrl(template, params = {}) {
   }
   return url.toString();
 }
+
+export function normalizeText(text) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+export function matchesSearch(item, query) {
+  if (!query) return true;
+  if (/^tt\d+$/.test(query)) {
+    return item.imdb === query;
+  }
+  const q = normalizeText(query);
+  if (/^\d+$/.test(query) && String(item.tmdb) === query) return true;
+  return (
+    normalizeText(item.title).includes(q) ||
+    normalizeText(item.originalTitle || "").includes(q)
+  );
+}

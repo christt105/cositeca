@@ -10,6 +10,8 @@ import {
   tmdbUrl,
   imdbUrl,
   issueUrl,
+  matchesSearch,
+  normalizeText,
 } from "../site/rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "../site/ui.js";
 import { GROUP_ID } from "./fixtures.js";
@@ -152,5 +154,44 @@ describe("ui helpers", () => {
 
   test("TYPE_LABELS covers the two catalog types", () => {
     assert.deepEqual(TYPE_LABELS, { movie: "Película", series: "Serie" });
+  });
+});
+
+describe("matchesSearch", () => {
+  const item = { tmdb: 1917, imdb: "tt8579674", title: "1917", originalTitle: "1917" };
+  const other = { tmdb: 550, imdb: "tt0137523", title: "El club de la lucha", originalTitle: "Fight Club" };
+
+  test("an empty query matches everything", () => {
+    assert.equal(matchesSearch(other, ""), true);
+  });
+
+  test("a numeric query matches the TMDB id", () => {
+    assert.equal(matchesSearch(other, "550"), true);
+    assert.equal(matchesSearch(other, "551"), false);
+  });
+
+  test("a numeric query also matches titles containing the digits", () => {
+    const numericTitle = { tmdb: 1, imdb: "tt1", title: "2012", originalTitle: "2012" };
+    assert.equal(matchesSearch(numericTitle, "2012"), true);
+    assert.equal(matchesSearch(item, "1917"), true);
+    assert.equal(matchesSearch(other, "1917"), false);
+  });
+
+  test("an IMDb id matches only the imdb field", () => {
+    assert.equal(matchesSearch(other, "tt0137523"), true);
+    assert.equal(matchesSearch(other, "tt9999999"), false);
+  });
+
+  test("text queries ignore case and accents in title and original title", () => {
+    assert.equal(matchesSearch(other, "CLUB"), true);
+    assert.equal(matchesSearch(other, "fight"), true);
+    assert.equal(matchesSearch({ tmdb: 2, title: "Pelicula" }, "película"), true);
+    assert.equal(matchesSearch(other, "xyz"), false);
+  });
+});
+
+describe("normalizeText", () => {
+  test("lowercases and strips diacritics", () => {
+    assert.equal(normalizeText("Árbol Ñandú"), "arbol nandu");
   });
 });
