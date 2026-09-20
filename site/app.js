@@ -1,4 +1,4 @@
-import { tmdbUrl, imdbUrl, issueUrl } from "./rules.js";
+import { tmdbUrl, imdbUrl, issueUrl, matchesSearch } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
 import { renderAdd } from "./add.js";
 import { bindTitleEditing } from "./edit.js";
@@ -28,13 +28,6 @@ const batchBadge = document.getElementById("batch-badge");
 let catalog = [];
 let byKey = new Map();
 let visitedWithinApp = false;
-
-function normalize(text) {
-  return text
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
 
 function titleHref(item) {
   return `#/${item.type}/${item.tmdb}`;
@@ -108,21 +101,6 @@ function showView(name) {
     el.classList.toggle("hidden", key !== name);
   }
   headerTools.classList.toggle("hidden", name !== "grid");
-}
-
-function matchesSearch(item, query) {
-  if (!query) return true;
-  if (/^\d+$/.test(query)) {
-    return String(item.tmdb) === query;
-  }
-  if (/^tt\d+$/.test(query)) {
-    return item.imdb === query;
-  }
-  const q = normalize(query);
-  return (
-    normalize(item.title).includes(q) ||
-    normalize(item.originalTitle || "").includes(q)
-  );
 }
 
 function hasGenre(item, value) {
