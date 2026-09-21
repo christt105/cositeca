@@ -141,7 +141,7 @@ export async function processAdd(fields, { qualities, groups, languages, tmdbCli
     data = { title, links: [entry] };
   }
   if (poster) {
-    data = { title: data.title, poster, links: data.links };
+    data = withPoster(data, poster);
   }
 
   return { filePath, content: dump(data), title, quality: fields.quality, action: "write", languagesChanged };
@@ -236,9 +236,7 @@ export async function processPoster(fields, { tmdbClient, fileExists, readFile }
   const poster = fields.poster?.trim() || undefined;
   validatePoster(poster);
   const current = load(readFile(filePath));
-  const data = poster
-    ? { title: current.title, poster, links: current.links }
-    : { title: current.title, links: current.links };
+  const data = withPoster(current, poster);
   return { filePath, content: dump(data), title: current.title, action: "write" };
 }
 

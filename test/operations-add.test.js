@@ -244,7 +244,7 @@ describe("processAdd", () => {
     );
   });
 
-  test("known bug B6: a new poster drops seasonPosters", async () => {
+  test("keeps seasonPosters when a new poster is sent", async () => {
     const { ctx } = deps({
       files: {
         "series/1396.yaml": yaml({
@@ -258,7 +258,10 @@ describe("processAdd", () => {
       { tmdb: TV_URL, quality: "4K", season: "1", poster: "https://image.tmdb.org/t/p/w342/new.jpg", link: link(19) },
       ctx
     );
-    assert.equal(load(result.content).seasonPosters, undefined);
+    const data = load(result.content);
+    assert.deepEqual(Object.keys(data), ["title", "poster", "seasonPosters", "links"]);
+    assert.equal(data.poster, "https://image.tmdb.org/t/p/w342/new.jpg");
+    assert.deepEqual(data.seasonPosters, { 1: "https://image.tmdb.org/t/p/w342/s1.jpg" });
   });
 
   test("keeps seasonPosters when no poster is sent", async () => {
