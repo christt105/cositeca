@@ -30,7 +30,7 @@ export const FIELD_LABELS = {
 };
 
 export function parseIssueBody(body, fieldIds) {
-  const sections = body.split(/\n(?=### )/);
+  const sections = body.replace(/\r\n?/g, "\n").split(/\n(?=### )/);
   const byLabel = new Map();
   for (const section of sections) {
     const match = /^### (.+?)\n+([\s\S]*)$/.exec(section.trim());

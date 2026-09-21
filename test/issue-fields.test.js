@@ -73,19 +73,15 @@ describe("parseIssueBody", () => {
     assert.deepEqual(parseIssueBody("", ["tmdb", "quality"]), { tmdb: "", quality: "" });
   });
 
-  test("known bug B1: a CRLF body yields every field empty", () => {
+  test("parses a CRLF body exactly like its LF version", () => {
     const crlf = ADD_BODY.replace(/\n/g, "\r\n");
-    const fields = parseIssueBody(crlf, ADD_FIELDS);
-    assert.deepEqual(
-      fields,
-      Object.fromEntries(ADD_FIELDS.map((id) => [id, ""])),
-      "parseIssueBody does not normalise CRLF, so nothing matches"
-    );
+    assert.deepEqual(parseIssueBody(crlf, ADD_FIELDS), parseIssueBody(ADD_BODY, ADD_FIELDS));
   });
 
-  test("known bug B1: a single CRLF section is enough to lose that field", () => {
-    const body = "### Calidad\r\n\r\n1080p";
-    assert.equal(parseIssueBody(body, ["quality"]).quality, "");
+  test("reads a single CRLF section and bodies with stray carriage returns", () => {
+    assert.equal(parseIssueBody("### Calidad\r\n\r\n1080p", ["quality"]).quality, "1080p");
+    const cr = ADD_BODY.replace(/\n/g, "\r");
+    assert.deepEqual(parseIssueBody(cr, ADD_FIELDS), parseIssueBody(ADD_BODY, ADD_FIELDS));
   });
 
   test("every field id used by the workflows has a label", () => {
