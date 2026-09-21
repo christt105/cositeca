@@ -174,8 +174,8 @@ async function main() {
     for (const filename of filenames) {
       const id = filename.replace(/\.yaml$/, "");
       const path = `${type}/${filename}`;
-      const data = load(readFileSync(path, "utf8"));
       try {
+        const data = load(readFileSync(path, "utf8"));
         const { entry, detail } = await builder(id, data);
         entries.push({ entry, detail, addedAt: addedTimestamps.get(path) ?? now });
       } catch (err) {
