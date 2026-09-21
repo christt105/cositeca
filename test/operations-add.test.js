@@ -141,6 +141,30 @@ describe("processAdd", () => {
     assert.deepEqual(cfg.languages.subs, config().languages.subs);
   });
 
+  test("reuses the canonical spelling of an existing language regardless of accents", async () => {
+    const { ctx, cfg } = deps();
+    const result = await processAdd(
+      { tmdb: MOVIE_URL, quality: "1080p", new_audio_language: "INGLES", new_subs_language: "ingles", link: link(12) },
+      ctx
+    );
+    assert.equal(result.languagesChanged, false);
+    assert.deepEqual(load(result.content).links[0].audio, ["Inglés"]);
+    assert.deepEqual(load(result.content).links[0].subs, ["Inglés"]);
+    assert.deepEqual(cfg.languages, config().languages);
+  });
+
+  test("rejects two languages typed in the new language field", async () => {
+    const { ctx, cfg } = deps();
+    await assert.rejects(
+      processAdd(
+        { tmdb: MOVIE_URL, quality: "1080p", new_subs_language: "Italiano, Portugués", link: link(13) },
+        ctx
+      ),
+      ValidationError
+    );
+    assert.deepEqual(cfg.languages, config().languages);
+  });
+
   test("does not duplicate a language already picked in the checkboxes", async () => {
     const { ctx } = deps();
     const result = await processAdd(

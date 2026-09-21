@@ -211,13 +211,37 @@ describe("sanitizeNewLanguage", () => {
     assert.equal(sanitizeNewLanguage("a".repeat(30), existing), "a".repeat(30));
   });
 
-  test("known bug B8: free text with commas or digits is accepted as one language", () => {
-    assert.equal(sanitizeNewLanguage("Italiano, Portugués", existing), "Italiano, Portugués");
-    assert.equal(sanitizeNewLanguage("<script>", existing), "<script>");
+  test("rejects values shorter than 2 characters", () => {
+    assert.throws(() => sanitizeNewLanguage("a", existing), ValidationError);
+    assert.equal(sanitizeNewLanguage("ab", existing), "ab");
   });
 
-  test("known bug B8: accents make an equivalent value a new one", () => {
-    assert.equal(sanitizeNewLanguage("Ingles", existing), "Ingles");
+  test("rejects commas, digits and punctuation", () => {
+    assert.throws(() => sanitizeNewLanguage("Italiano, Portugués", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("Italiano 2", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("<script>", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("Italiano/Portugués", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("Italiano.", existing), ValidationError);
+  });
+
+  test("raises a Spanish message for an invalid value", () => {
+    assert.throws(
+      () => sanitizeNewLanguage("Italiano, Portugués", existing),
+      (err) => err instanceof ValidationError && /idioma nuevo/.test(err.message) && err.message.includes("Italiano, Portugués")
+    );
+  });
+
+  test("accepts letters with accents and marks", () => {
+    assert.equal(sanitizeNewLanguage("Portugués", existing), "Portugués");
+    assert.equal(sanitizeNewLanguage("Árabe", existing), "Árabe");
+    assert.equal(sanitizeNewLanguage("Portugue\u0301s", existing), "Portugue\u0301s");
+  });
+
+  test("reuses an existing value regardless of accents and case", () => {
+    assert.equal(sanitizeNewLanguage("Ingles", existing), "Inglés");
+    assert.equal(sanitizeNewLanguage("ingles", existing), "Inglés");
+    assert.equal(sanitizeNewLanguage("INGLES", existing), "Inglés");
+    assert.equal(sanitizeNewLanguage("Cástellano", existing), "Castellano");
   });
 });
 

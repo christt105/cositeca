@@ -5,6 +5,9 @@ import {
   TMDB_URL_RE,
   TMDB_ID_RE,
   IMDB_ID_RE,
+  cleanNewLanguage,
+  newLanguageError,
+  normalizeText,
 } from "../site/rules.js";
 
 export { TELEGRAM_LINK_RE, TMDB_URL_RE, TMDB_ID_RE, IMDB_ID_RE };
@@ -113,18 +116,14 @@ export function validateLanguages(values, field, allowed) {
   }
 }
 
-const MAX_NEW_LANGUAGE_LENGTH = 30;
-
 export function sanitizeNewLanguage(raw, existing) {
   if (raw === undefined || raw === null) return undefined;
-  const value = raw.trim().replace(/\s+/g, " ");
+  const value = cleanNewLanguage(raw);
   if (value === "") return undefined;
-  if (value.length > MAX_NEW_LANGUAGE_LENGTH) {
-    throw new ValidationError(
-      `new language is too long (max ${MAX_NEW_LANGUAGE_LENGTH} characters): ${value}`
-    );
-  }
-  const existingMatch = existing.find((v) => v.toLowerCase() === value.toLowerCase());
+  const error = newLanguageError(value);
+  if (error) throw new ValidationError(`${error} Recibido: ${value}`);
+  const key = normalizeText(value);
+  const existingMatch = existing.find((v) => normalizeText(v) === key);
   return existingMatch ?? value;
 }
 

@@ -2,6 +2,7 @@ export const TELEGRAM_LINK_RE = /^https:\/\/t\.me\/c\/(\d+)\/(?:(\d+)\/)?(\d+)$/
 export const TMDB_URL_RE = /^https?:\/\/(?:www\.)?themoviedb\.org\/(movie|tv)\/(\d+)(?:-.*)?$/;
 export const TMDB_ID_RE = /^tmdb:(\d+)$/;
 export const IMDB_ID_RE = /^tt\d+$/;
+export const NEW_LANGUAGE_RE = /^[\p{L}\p{M}\s]{2,30}$/u;
 
 export const REPO_URL = "https://github.com/christt105/cositeca";
 export const TMDB_PROXY_URL = "https://cositeca-tmdb-proxy.christt105.workers.dev";
@@ -39,6 +40,21 @@ export function normalizeText(text) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+/** Trims a new language typed in a form and collapses its inner whitespace. */
+export function cleanNewLanguage(value) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Spanish error message for a new language typed in a form, or "" when it is
+ * empty or valid: a single language of 2 to 30 letters and spaces.
+ */
+export function newLanguageError(value) {
+  const cleaned = cleanNewLanguage(value);
+  if (cleaned === "" || NEW_LANGUAGE_RE.test(cleaned)) return "";
+  return "El idioma nuevo tiene que ser uno solo, de 2 a 30 letras, sin comas, números ni signos.";
 }
 
 export function matchesSearch(item, query) {

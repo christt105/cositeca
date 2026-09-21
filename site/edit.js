@@ -1,4 +1,4 @@
-import { tmdbUrl, issueUrl, listFieldValue } from "./rules.js";
+import { tmdbUrl, issueUrl, listFieldValue, newLanguageError } from "./rules.js";
 import { esc } from "./ui.js";
 import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
 import { openReidentify } from "./reid.js";
@@ -61,7 +61,9 @@ function renderEditForm(row, item, link, meta) {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const newLink = form.elements.link.value.trim();
-    const error = validateLink(newLink);
+    const newAudio = form.elements.new_audio_language.value.trim();
+    const newSubs = form.elements.new_subs_language.value.trim();
+    const error = validateLink(newLink) || newLanguageError(newAudio) || newLanguageError(newSubs);
     form.querySelector("[data-error]").textContent = error;
     if (error) return;
     const audio = checked(form, "audio");
@@ -75,8 +77,8 @@ function renderEditForm(row, item, link, meta) {
       season: isSeries ? form.elements.season.value.trim() : "",
       audio: listFieldValue(audio.join(", "), link.audio),
       subs: listFieldValue(subs.join(", "), link.subs),
-      new_audio_language: form.elements.new_audio_language.value.trim(),
-      new_subs_language: form.elements.new_subs_language.value.trim(),
+      new_audio_language: newAudio,
+      new_subs_language: newSubs,
       tags: listFieldValue(tags, link.tags),
     };
     const view = row.closest(".title");

@@ -13,6 +13,7 @@ import {
   listFieldValue,
   matchesSearch,
   normalizeText,
+  newLanguageError,
 } from "../site/rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "../site/ui.js";
 import { GROUP_ID } from "./fixtures.js";
@@ -201,5 +202,20 @@ describe("matchesSearch", () => {
 describe("normalizeText", () => {
   test("lowercases and strips diacritics", () => {
     assert.equal(normalizeText("Árbol Ñandú"), "arbol nandu");
+  });
+});
+
+describe("newLanguageError", () => {
+  test("is empty for nothing typed and for a single language", () => {
+    assert.equal(newLanguageError(""), "");
+    assert.equal(newLanguageError("   "), "");
+    assert.equal(newLanguageError("Portugués"), "");
+    assert.equal(newLanguageError("  Alemán   antiguo "), "");
+  });
+
+  test("explains the rule for commas, digits, punctuation and bad lengths", () => {
+    for (const value of ["Italiano, Portugués", "Latino 2", "<script>", "a", "a".repeat(31)]) {
+      assert.match(newLanguageError(value), /idioma nuevo/);
+    }
   });
 });

@@ -6,6 +6,7 @@ import {
   TELEGRAM_LINK_RE,
   tmdbUrl,
   issueUrl,
+  newLanguageError,
 } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
@@ -323,6 +324,7 @@ function renderForm() {
     <div class="add__label">Subtítulos</div>
     <div class="checks">${checkboxGroup("subs", meta.languages.subs)}</div>
     <input id="add-subs-other" class="search" type="text" maxlength="30" placeholder="Otro idioma de subtítulos (opcional)">
+    <p id="add-language-error" class="add__error"></p>
     <label class="add__label" for="add-tags">Etiquetas (opcional, separadas por comas)</label>
     <input id="add-tags" class="search" type="text" placeholder="HDR, REMUX">
     <button type="submit" class="btn btn--add add__submit">Aceptar</button>
@@ -382,7 +384,11 @@ function buildAddFields() {
   const link = $("add-link").value.trim();
   const error = validateLink(link);
   $("add-link-error").textContent = error;
-  if (!link || error) return null;
+  const newAudio = $("add-audio-other").value.trim();
+  const newSubs = $("add-subs-other").value.trim();
+  const languageError = newLanguageError(newAudio) || newLanguageError(newSubs);
+  $("add-language-error").textContent = languageError;
+  if (!link || error || languageError) return null;
   const seasonValue = selected.type === "tv"
     ? ($("add-season").value === "other" ? $("add-season-other").value.trim() : $("add-season").value)
     : "";
@@ -392,8 +398,8 @@ function buildAddFields() {
     season: seasonValue,
     audio: checked("audio").join(", "),
     subs: checked("subs").join(", "),
-    new_audio_language: $("add-audio-other").value.trim(),
-    new_subs_language: $("add-subs-other").value.trim(),
+    new_audio_language: newAudio,
+    new_subs_language: newSubs,
     tags: $("add-tags").value.trim(),
     poster: posterChoice ?? "",
     link,

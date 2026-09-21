@@ -110,6 +110,28 @@ describe("processFix: updating a link", () => {
     assert.ok(cfg.languages.audio.includes("Alemán"));
   });
 
+  test("reuses the canonical spelling of an existing language regardless of accents", () => {
+    const { ctx, cfg } = deps();
+    const result = processFix(
+      { old_link: link(1), new_link: link(1), new_subs_language: "INGLES" },
+      ctx
+    );
+    assert.equal(result.languagesChanged, false);
+    assert.deepEqual(load(result.content).links[0].subs, ["Inglés"]);
+    assert.deepEqual(cfg.languages, config().languages);
+  });
+
+  test("rejects a new language with digits or commas", () => {
+    const { ctx, cfg } = deps();
+    for (const value of ["Italiano, Portugués", "Latino 2"]) {
+      assert.throws(
+        () => processFix({ old_link: link(1), new_link: link(1), new_audio_language: value }, ctx),
+        ValidationError
+      );
+    }
+    assert.deepEqual(cfg.languages, config().languages);
+  });
+
   test("keeps the entry key order after an update", () => {
     const { ctx } = deps();
     const result = processFix(
