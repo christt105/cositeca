@@ -31,7 +31,11 @@ synopses). Deployed on GitHub Pages.
   their `add`/`fix`/`poster` label), processed by
   `.github/workflows/add-entry.yml`, which commits directly to `main`. The
   title page and the add page open those forms with every field prefilled
-  by query string, so users only review and submit.
+  by query string, so users only review and submit. Both issue workflows
+  (`add-entry.yml` and `batch.yml`) run on `opened` and `edited`, but only
+  for open issues without the `bug` label, so editing an applied (closed)
+  issue does nothing and an issue that failed with `invalid` can be fixed
+  by editing it.
 - `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
   `new_link` is empty and no other field is filled. An empty `new_link`
   next to any other field keeps the current link. The same rule applies to
