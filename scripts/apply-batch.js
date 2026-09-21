@@ -13,6 +13,7 @@ import {
   checkAntiSpam,
   reportFailure,
 } from "./add-entry.js";
+import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
 
 export const MAX_OPERATIONS = 50;
 const OPERATIONS_LABEL = "Operaciones (JSON)";
@@ -161,20 +162,6 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
   return { applied, skipped, languagesChanged };
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function findRunId(gh, workflow, branch) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await sleep(1500);
-    const runs = JSON.parse(gh([
-      "run", "list", "--workflow", workflow, "--branch", branch,
-      "--limit", "1", "--json", "databaseId",
-    ]));
-    if (runs.length) return runs[0].databaseId;
-  }
-  throw new Error(`${workflow} did not start on ${branch}`);
-}
-
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
@@ -233,19 +220,7 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
     writeFileSync("languages.yaml", dump(languages));
   }
 
-  const { branch } = progress;
-  git(["config", "user.name", "cositeca-bot"]);
-  git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
-  git(["checkout", "-b", branch]);
-  git(["add", "-A"]);
   const subject = `feat: batch changes (#${issueNumber})`;
-  git(["commit", "-m", subject, "-m", `${result.applied.length} operation(s) applied, ref #${issueNumber}`]);
-  git(["push", "-u", "origin", branch]);
-  progress.pushed = true;
-
-  gh(["workflow", "run", "validate.yml", "--ref", branch]);
-  const runId = await findRunId(gh, "validate.yml", branch);
-
   const prBodyParts = [
     `Ref #${issueNumber}`,
     "",
@@ -264,16 +239,16 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
     "Este PR requiere revisión y merge manual: la validación automática que pasa no lo mergea solo."
   );
 
-  const prUrl = gh([
-    "pr", "create", "--base", "main", "--head", branch,
-    "--title", subject, "--body", prBodyParts.join("\n"),
-  ]).trim();
-  progress.prCreated = true;
-  const prNumber = prUrl.split("/").pop();
-
-  try {
-    gh(["run", "watch", String(runId), "--exit-status"]);
-  } catch {
+  const { prUrl, prNumber, validated } = await openBotPr({
+    subject,
+    commitBody: `${result.applied.length} operation(s) applied, ref #${issueNumber}`,
+    prBody: prBodyParts.join("\n"),
+    autoMerge: false,
+    gh,
+    git,
+    progress,
+  });
+  if (!validated) {
     gh([
       "issue", "comment", issueNumber, "--body",
       `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
@@ -285,9 +260,7 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
     "issue", "comment", issueNumber, "--body",
     `${result.applied.length} operación(es) aplicada(s) y validada(s), esperando revisión manual antes de mergear: ${prUrl} (PR #${prNumber}).`,
   ]);
-  if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
-    gh(["issue", "close", issueNumber]);
-  }
+  closeIssueIfOpen(gh, issueNumber);
 }
 
 if (process.env.ISSUE_NUMBER) {

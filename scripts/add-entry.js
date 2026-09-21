@@ -12,6 +12,7 @@ import {
   sanitizeNewLanguage,
   createTmdbClient,
 } from "./lib.js";
+import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
 
 export const FIELD_LABELS = {
   tmdb: "URL de TMDB o id de IMDB",
@@ -448,20 +449,6 @@ export function collectExistingLinks() {
   return links;
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function findRunId(gh, workflow, branch) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await sleep(1500);
-    const runs = JSON.parse(gh([
-      "run", "list", "--workflow", workflow, "--branch", branch,
-      "--limit", "1", "--json", "databaseId",
-    ]));
-    if (runs.length) return runs[0].databaseId;
-  }
-  throw new Error(`${workflow} did not start on ${branch}`);
-}
-
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
@@ -551,28 +538,16 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
 
   const { subject, close } = describeResult(issueLabel, result);
 
-  const { branch } = progress;
-  git(["config", "user.name", "cositeca-bot"]);
-  git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
-  git(["checkout", "-b", branch]);
-  git(["add", "-A"]);
-  git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
-  git(["push", "-u", "origin", branch]);
-  progress.pushed = true;
-
-  gh(["workflow", "run", "validate.yml", "--ref", branch]);
-  const runId = await findRunId(gh, "validate.yml", branch);
-
-  const prUrl = gh([
-    "pr", "create", "--base", "main", "--head", branch,
-    "--title", subject, "--body", `Closes #${issueNumber}`,
-  ]).trim();
-  progress.prCreated = true;
-  const prNumber = prUrl.split("/").pop();
-
-  try {
-    gh(["run", "watch", String(runId), "--exit-status"]);
-  } catch {
+  const { validated } = await openBotPr({
+    subject,
+    commitBody: `Closes #${issueNumber}`,
+    prBody: `Closes #${issueNumber}`,
+    autoMerge: true,
+    gh,
+    git,
+    progress,
+  });
+  if (!validated) {
     gh([
       "issue", "comment", issueNumber, "--body",
       "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
@@ -580,15 +555,11 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
     return;
   }
 
-  gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
-  gh(["workflow", "run", "deploy.yml"]);
   gh([
     "issue", "comment", issueNumber, "--body",
     `${close} La web se actualiza en un par de minutos.`,
   ]);
-  if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
-    gh(["issue", "close", issueNumber]);
-  }
+  closeIssueIfOpen(gh, issueNumber);
 }
 
 if (process.env.ISSUE_NUMBER && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
