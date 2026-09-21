@@ -246,6 +246,23 @@ describe("applyBatch", () => {
     ]);
   });
 
+  test("skips an operation with a non-string field instead of aborting the batch", async () => {
+    const result = await applyBatch(
+      [
+        { type: "poster", tmdb: MOVIE_URL, poster: 42 },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", audio: ["Castellano"], link: link(22) },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", link: link(23) },
+      ],
+      ctx()
+    );
+    assert.equal(result.applied.length, 1);
+    assert.match(result.applied[0], /^operación 3: /);
+    assert.deepEqual(result.skipped, [
+      "operación 1: poster must be a string, got number",
+      "operación 2: audio must be a string, got array",
+    ]);
+  });
+
   test("rolls back a new language when the operation is rejected afterwards", async () => {
     const result = await applyBatch(
       [

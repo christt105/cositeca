@@ -209,11 +209,19 @@ describe("processAdd", () => {
     );
   });
 
-  test("known bug: a non-string list field throws TypeError instead of ValidationError", async () => {
+  test("rejects a non-string list field with a ValidationError naming the field", async () => {
     const { ctx } = deps();
     await assert.rejects(
       () => processAdd({ tmdb: MOVIE_URL, quality: "1080p", audio: ["Castellano"], link: link(21) }, ctx),
-      TypeError
+      (err) => err instanceof ValidationError && err.message === "audio must be a string, got array"
+    );
+  });
+
+  test("rejects a non-string poster with a ValidationError naming the field", async () => {
+    const { ctx } = deps();
+    await assert.rejects(
+      () => processAdd({ tmdb: MOVIE_URL, quality: "1080p", poster: 42, link: link(22) }, ctx),
+      (err) => err instanceof ValidationError && err.message === "poster must be a string, got number"
     );
   });
 

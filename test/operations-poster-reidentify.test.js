@@ -276,11 +276,11 @@ describe("processReidentify", () => {
     assert.equal(load(result.files[0].content).poster, undefined);
   });
 
-  test("known bug: a non-string poster throws TypeError instead of ValidationError", async () => {
+  test("rejects a non-string poster with a ValidationError naming the field", async () => {
     const { ctx } = deps(sourceMovie);
     await assert.rejects(
       () => processReidentify({ tmdb: MOVIE_URL, new_tmdb: OTHER_MOVIE_URL, poster: 42 }, ctx),
-      TypeError
+      (err) => err instanceof ValidationError && err.message === "poster must be a string, got number"
     );
   });
 });

@@ -46,6 +46,21 @@ export function parseIssueBody(body, fieldIds) {
   return fields;
 }
 
+const TEXT_FIELDS = [
+  "tmdb", "quality", "audio", "subs", "new_audio_language", "new_subs_language",
+  "tags", "poster", "link", "old_link", "new_link", "new_tmdb",
+];
+
+function requireTextFields(fields) {
+  for (const id of TEXT_FIELDS) {
+    const value = fields[id];
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      const kind = Array.isArray(value) ? "array" : typeof value;
+      throw new ValidationError(`${id} must be a string, got ${kind}`);
+    }
+  }
+}
+
 function parseSeasonField(raw) {
   if (raw === "" || raw === undefined) return undefined;
   if (raw === "all") return "all";
@@ -85,6 +100,7 @@ function applyNewLanguage(raw, list, languages) {
 }
 
 export async function processAdd(fields, { qualities, groups, languages, tmdbClient, existingLinks, fileExists, readFile }) {
+  requireTextFields(fields);
   const season = parseSeasonField(fields.season);
   const descriptor = parseTmdbInput(fields.tmdb, { hasSeason: season !== undefined });
   const target = await resolveTmdbTarget(descriptor, tmdbClient);
@@ -153,6 +169,7 @@ export function findFileByLink(link, { readdir, readFile }) {
 }
 
 export function processFix(fields, { qualities, groups, languages, existingLinks, readdir, readFile }) {
+  requireTextFields(fields);
   const located = findFileByLink(fields.old_link, { readdir, readFile });
   if (!located) {
     throw new ValidationError(`link not found in the catalog: ${fields.old_link}`);
@@ -208,6 +225,7 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
 }
 
 export async function processPoster(fields, { tmdbClient, fileExists, readFile }) {
+  requireTextFields(fields);
   const descriptor = parseTmdbInput(fields.tmdb);
   const target = await resolveTmdbTarget(descriptor, tmdbClient);
   const dir = target.type === "movie" ? "movies" : "series";
@@ -242,6 +260,7 @@ function pruneSeasonPosters(seasonPosters, links) {
 }
 
 export async function processReidentify(fields, { qualities, groups, languages, tmdbClient, fileExists, readFile }) {
+  requireTextFields(fields);
   const source = await resolveTmdbTarget(parseTmdbInput(fields.tmdb), tmdbClient);
   const sourcePath = `${source.type === "movie" ? "movies" : "series"}/${source.id}.yaml`;
   if (!fileExists(sourcePath)) {
