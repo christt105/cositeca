@@ -57,6 +57,12 @@ export function newLanguageError(value) {
   return "El idioma nuevo tiene que ser uno solo, de 2 a 30 letras, sin comas, números ni signos.";
 }
 
+/** The Telegram message id (last numeric segment) of a t.me link, or "" if the link is invalid. */
+export function telegramMessageId(link) {
+  const match = TELEGRAM_LINK_RE.exec(link ?? "");
+  return match ? match[3] : "";
+}
+
 function normalizeVersionList(values) {
   return [...new Set(values ?? [])].sort();
 }

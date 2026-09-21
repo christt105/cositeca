@@ -1,4 +1,4 @@
-import { tmdbUrl, imdbUrl, issueUrl, matchesSearch } from "./rules.js";
+import { tmdbUrl, imdbUrl, issueUrl, matchesSearch, telegramMessageId } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
 import { renderAdd } from "./add.js";
 import { bindTitleEditing } from "./edit.js";
@@ -160,6 +160,7 @@ function seasonSortKey(season) {
 }
 
 function renderVersionRow(link, index) {
+  const messageId = telegramMessageId(link.link);
   return `
     <div class="version-row" data-index="${index}">
       <span class="badge">${esc(link.quality)}</span>
@@ -167,6 +168,7 @@ function renderVersionRow(link, index) {
       ${renderChips(link.subs, "chip--subs")}
       ${renderChips(link.tags, "")}
       <span class="chip">${esc(link.group)}</span>
+      ${messageId ? `<span class="version-row__msgid">#${esc(messageId)}</span>` : ""}
       <span class="version-row__tools">
         <button type="button" class="link-btn" data-edit>Editar</button>
         <button type="button" class="link-btn" data-reid>Reidentificar</button>

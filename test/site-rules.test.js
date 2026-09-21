@@ -14,6 +14,7 @@ import {
   matchesSearch,
   normalizeText,
   newLanguageError,
+  telegramMessageId,
   findIndistinguishableVersions,
 } from "../site/rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "../site/ui.js";
@@ -219,6 +220,22 @@ describe("matchesSearch", () => {
 describe("normalizeText", () => {
   test("lowercases and strips diacritics", () => {
     assert.equal(normalizeText("Árbol Ñandú"), "arbol nandu");
+  });
+});
+
+describe("telegramMessageId", () => {
+  test("reads the message id from a link without a topic", () => {
+    assert.equal(telegramMessageId(link(31341)), "31341");
+  });
+
+  test("reads the message id from a link with a topic", () => {
+    assert.equal(telegramMessageId(link(31341, 7)), "31341");
+  });
+
+  test("is empty for an invalid link", () => {
+    assert.equal(telegramMessageId("https://t.me/canal/42"), "");
+    assert.equal(telegramMessageId(""), "");
+    assert.equal(telegramMessageId(undefined), "");
   });
 });
 
