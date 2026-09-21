@@ -142,7 +142,7 @@ describe("validateTitleFile: invalid files", () => {
     );
   });
 
-  test("known limitation B9: two entries that differ only in the link are accepted", () => {
+  test("B9: two entries that differ only in the link pass schema validation (flagged separately as a warning)", () => {
     const data = movieFile({
       links: [
         { quality: "1080p", link: link(10) },

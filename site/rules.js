@@ -57,6 +57,35 @@ export function newLanguageError(value) {
   return "El idioma nuevo tiene que ser uno solo, de 2 a 30 letras, sin comas, números ni signos.";
 }
 
+function normalizeVersionList(values) {
+  return [...new Set(values ?? [])].sort();
+}
+
+function versionSignature(entry) {
+  return JSON.stringify({
+    season: entry.season ?? null,
+    quality: entry.quality ?? null,
+    audio: normalizeVersionList(entry.audio),
+    subs: normalizeVersionList(entry.subs),
+    tags: normalizeVersionList(entry.tags),
+  });
+}
+
+/**
+ * Groups of 2+ link entries that share season, quality, audio, subs and
+ * tags (compared as sets, a missing list treated as empty) and differ only
+ * in the link: versions a user has no way to tell apart.
+ */
+export function findIndistinguishableVersions(links) {
+  const groups = new Map();
+  for (const entry of links) {
+    const key = versionSignature(entry);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
+
 export function matchesSearch(item, query) {
   if (!query) return true;
   if (/^tt\d+$/.test(query)) {

@@ -14,9 +14,10 @@ import {
   matchesSearch,
   normalizeText,
   newLanguageError,
+  findIndistinguishableVersions,
 } from "../site/rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS } from "../site/ui.js";
-import { GROUP_ID } from "./fixtures.js";
+import { GROUP_ID, link } from "./fixtures.js";
 
 describe("shared regexes", () => {
   test("TELEGRAM_LINK_RE captures group, optional topic and message", () => {
@@ -218,6 +219,41 @@ describe("matchesSearch", () => {
 describe("normalizeText", () => {
   test("lowercases and strips diacritics", () => {
     assert.equal(normalizeText("Árbol Ñandú"), "arbol nandu");
+  });
+});
+
+describe("findIndistinguishableVersions", () => {
+  test("groups two entries with identical attributes", () => {
+    const a = { quality: "1080p", audio: ["Castellano"], link: link(1) };
+    const b = { quality: "1080p", audio: ["Castellano"], link: link(2) };
+    assert.deepEqual(findIndistinguishableVersions([a, b]), [[a, b]]);
+  });
+
+  test("ignores the order of audio, subs and tags", () => {
+    const a = { quality: "1080p", audio: ["Castellano", "Inglés"], tags: ["HDR", "Remux"], link: link(1) };
+    const b = { quality: "1080p", audio: ["Inglés", "Castellano"], tags: ["Remux", "HDR"], link: link(2) };
+    assert.deepEqual(findIndistinguishableVersions([a, b]), [[a, b]]);
+  });
+
+  test("treats a missing list the same as an empty one", () => {
+    const a = { quality: "1080p", subs: [], link: link(1) };
+    const b = { quality: "1080p", link: link(2) };
+    assert.deepEqual(findIndistinguishableVersions([a, b]), [[a, b]]);
+  });
+
+  test("does not flag entries with a different season or tags", () => {
+    const a = { season: 1, quality: "1080p", link: link(1) };
+    const b = { season: 2, quality: "1080p", link: link(2) };
+    const c = { season: 1, quality: "1080p", tags: ["Extendida"], link: link(3) };
+    assert.deepEqual(findIndistinguishableVersions([a, b, c]), []);
+  });
+
+  test("groups three indistinguishable entries together", () => {
+    const a = { quality: "4K", link: link(1) };
+    const b = { quality: "4K", link: link(2) };
+    const c = { quality: "4K", link: link(3) };
+    const d = { quality: "1080p", link: link(4) };
+    assert.deepEqual(findIndistinguishableVersions([a, b, c, d]), [[a, b, c]]);
   });
 });
 

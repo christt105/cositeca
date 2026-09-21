@@ -6,6 +6,7 @@ import {
   loadTmdbCache,
   saveTmdbCache,
 } from "./lib.js";
+import { findIndistinguishableVersions } from "../site/rules.js";
 
 const groups = load(readFileSync("groups.yaml", "utf8"));
 const qualities = load(readFileSync("qualities.yaml", "utf8"));
@@ -22,6 +23,7 @@ if (!tmdbClient) {
 }
 
 let errors = 0;
+let warnings = 0;
 const seenLinks = new Map();
 
 for (const type of ["movies", "series"]) {
@@ -42,6 +44,11 @@ for (const type of ["movies", "series"]) {
           throw new Error(`duplicate link, also used in ${seenLinks.get(link)}`);
         }
         seenLinks.set(link, path);
+      }
+      for (const group of findIndistinguishableVersions(data.links)) {
+        const links = group.map((entry) => entry.link).join(", ");
+        console.warn(`${path}: indistinguishable versions: ${links}`);
+        warnings++;
       }
       if (tmdbClient) {
         const tmdbType = type === "movies" ? "movie" : "tv";
@@ -65,6 +72,10 @@ for (const type of ["movies", "series"]) {
 
 if (tmdbClient) {
   saveTmdbCache(cachePath, tmdbCache);
+}
+
+if (warnings > 0) {
+  console.warn(`\n${warnings} indistinguishable version group(s) found`);
 }
 
 if (errors > 0) {
