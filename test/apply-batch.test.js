@@ -182,6 +182,24 @@ describe("applyBatch", () => {
     assert.deepEqual(data.links, [{ quality: "4K", link: link(15) }]);
   });
 
+  test("a fix clears audio and subs with the \"-\" convention", async () => {
+    writeFileSync(
+      join(root, "movies/550.yaml"),
+      yaml({
+        title: "El club de la lucha",
+        links: [{ quality: "1080p", audio: ["Castellano"], subs: ["Inglés"], tags: ["Extendida"], link: link(1) }],
+      })
+    );
+    const result = await applyBatch(
+      [{ type: "fix", tmdb: MOVIE_URL, old_link: link(1), new_link: link(1), audio: "-", subs: "-", tags: "" }],
+      ctx()
+    );
+    assert.deepEqual(result.skipped, []);
+    fs.flush();
+    const data = load(readFileSync(join(root, "movies/550.yaml"), "utf8"));
+    assert.deepEqual(data.links, [{ quality: "1080p", tags: ["Extendida"], link: link(1) }]);
+  });
+
   test("an operation on a file deleted earlier in the batch is skipped", async () => {
     const result = await applyBatch(
       [

@@ -1,4 +1,4 @@
-import { tmdbUrl, issueUrl } from "./rules.js";
+import { tmdbUrl, issueUrl, listFieldValue } from "./rules.js";
 import { esc } from "./ui.js";
 import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
 import { openReidentify } from "./reid.js";
@@ -73,11 +73,11 @@ function renderEditForm(row, item, link, meta) {
       new_link: newLink,
       quality: form.elements.quality.value,
       season: isSeries ? form.elements.season.value.trim() : "",
-      audio: audio.join(", "),
-      subs: subs.join(", "),
+      audio: listFieldValue(audio.join(", "), link.audio),
+      subs: listFieldValue(subs.join(", "), link.subs),
       new_audio_language: form.elements.new_audio_language.value.trim(),
       new_subs_language: form.elements.new_subs_language.value.trim(),
-      tags: tags || ((link.tags || []).length ? "-" : ""),
+      tags: listFieldValue(tags, link.tags),
     };
     const view = row.closest(".title");
     if (isBatchMode()) {

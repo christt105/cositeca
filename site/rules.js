@@ -15,6 +15,14 @@ export function imdbUrl(imdbId) {
   return `https://www.imdb.com/title/${imdbId}/`;
 }
 
+/**
+ * Value for a list field of a fix issue: the new value, or "-" when it is
+ * empty but the link had values, so the bot clears them instead of keeping them.
+ */
+export function listFieldValue(value, previous) {
+  return value || ((previous || []).length ? "-" : "");
+}
+
 export function issueUrl(template, params = {}) {
   const url = new URL(`${REPO_URL}/issues/new`);
   url.searchParams.set("template", template);

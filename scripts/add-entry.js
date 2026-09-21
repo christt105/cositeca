@@ -194,15 +194,13 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
     if (season !== undefined) {
       updated.season = season;
     }
-    const audio = parseListField(fields.audio);
-    if (audio) updated.audio = audio;
-    const subs = parseListField(fields.subs);
-    if (subs) updated.subs = subs;
-    if (fields.tags === "-") {
-      delete updated.tags;
-    } else {
-      const tags = parseListField(fields.tags);
-      if (tags) updated.tags = tags;
+    for (const key of ["audio", "subs", "tags"]) {
+      if (fields[key] === "-") {
+        delete updated[key];
+      } else {
+        const values = parseListField(fields[key]);
+        if (values) updated[key] = values;
+      }
     }
 
     const newAudio = applyNewLanguage(fields.new_audio_language, "audio", languages);

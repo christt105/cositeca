@@ -10,6 +10,7 @@ import {
   tmdbUrl,
   imdbUrl,
   issueUrl,
+  listFieldValue,
   matchesSearch,
   normalizeText,
 } from "../site/rules.js";
@@ -91,6 +92,13 @@ describe("URL helpers", () => {
 
   test("imdbUrl builds a title URL", () => {
     assert.equal(imdbUrl("tt0137523"), "https://www.imdb.com/title/tt0137523/");
+  });
+
+  test("listFieldValue sends \"-\" only when a list with values is emptied", () => {
+    assert.equal(listFieldValue("Castellano, Inglés", ["Castellano"]), "Castellano, Inglés");
+    assert.equal(listFieldValue("", ["Castellano"]), "-");
+    assert.equal(listFieldValue("", []), "");
+    assert.equal(listFieldValue("", undefined), "");
   });
 
   test("issueUrl points at the repo issue form and keeps the template", () => {

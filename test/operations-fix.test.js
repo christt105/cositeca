@@ -121,13 +121,36 @@ describe("processFix: updating a link", () => {
     ]);
   });
 
-  test("known bug B7: an empty audio or subs field does not clear the stored value", () => {
+  test("an empty audio or subs field keeps the stored value", () => {
     const { ctx } = deps();
     const result = processFix(
       { old_link: link(1), new_link: link(1), audio: "", subs: "" },
       ctx
     );
     assert.deepEqual(load(result.content).links[0].audio, ["Castellano"]);
+  });
+
+  test("clears the audio with the \"-\" convention", () => {
+    const { ctx } = deps();
+    const result = processFix({ old_link: link(1), new_link: link(1), audio: "-" }, ctx);
+    assert.deepEqual(load(result.content).links[0], { quality: "1080p", link: link(1) });
+  });
+
+  test("clears the subs with the \"-\" convention", () => {
+    const { ctx } = deps({
+      files: {
+        "movies/550.yaml": yaml({
+          title: "El club de la lucha",
+          links: [{ quality: "1080p", audio: ["Castellano"], subs: ["Inglés", "Forzados"], link: link(1) }],
+        }),
+      },
+    });
+    const result = processFix({ old_link: link(1), new_link: link(1), subs: "-" }, ctx);
+    assert.deepEqual(load(result.content).links[0], {
+      quality: "1080p",
+      audio: ["Castellano"],
+      link: link(1),
+    });
   });
 
   test("rejects a new link that already exists elsewhere", () => {
