@@ -153,6 +153,18 @@ describe("processAdd", () => {
     assert.deepEqual(cfg.languages, config().languages);
   });
 
+  test("reuses the spelling a new language already has in the other list", async () => {
+    const { ctx, cfg } = deps();
+    const result = await processAdd(
+      { tmdb: MOVIE_URL, quality: "1080p", new_subs_language: "latino", link: link(14) },
+      ctx
+    );
+    assert.equal(result.languagesChanged, true);
+    assert.deepEqual(load(result.content).links[0].subs, ["Latino"]);
+    assert.deepEqual(cfg.languages.subs, [...config().languages.subs, "Latino"]);
+    assert.deepEqual(cfg.languages.audio, config().languages.audio);
+  });
+
   test("rejects two languages typed in the new language field", async () => {
     const { ctx, cfg } = deps();
     await assert.rejects(

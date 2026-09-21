@@ -92,7 +92,8 @@ function dedupe(list) {
 }
 
 function applyNewLanguage(raw, list, languages) {
-  const resolved = sanitizeNewLanguage(raw, languages[list]);
+  const known = [...languages[list], ...Object.values(languages).flat()];
+  const resolved = sanitizeNewLanguage(raw, known);
   if (resolved === undefined) return { values: undefined, changed: false };
   const changed = !languages[list].includes(resolved);
   if (changed) languages[list].push(resolved);

@@ -234,7 +234,7 @@ describe("sanitizeNewLanguage", () => {
   test("accepts letters with accents and marks", () => {
     assert.equal(sanitizeNewLanguage("Portugués", existing), "Portugués");
     assert.equal(sanitizeNewLanguage("Árabe", existing), "Árabe");
-    assert.equal(sanitizeNewLanguage("Portugue\u0301s", existing), "Portugue\u0301s");
+    assert.equal(sanitizeNewLanguage("Portugue\u0301s", existing), "Portugu\u00e9s");
   });
 
   test("reuses an existing value regardless of accents and case", () => {

@@ -42,9 +42,9 @@ export function normalizeText(text) {
     .toLowerCase();
 }
 
-/** Trims a new language typed in a form and collapses its inner whitespace. */
+/** Trims a new language typed in a form, collapses its inner whitespace and composes its accents. */
 export function cleanNewLanguage(value) {
-  return value.trim().replace(/\s+/g, " ");
+  return value.normalize("NFC").trim().replace(/\s+/g, " ");
 }
 
 /**
