@@ -1,5 +1,5 @@
 import { tmdbUrl, issueUrl, listFieldValue, newLanguageError } from "./rules.js";
-import { esc } from "./ui.js";
+import { esc, checked } from "./ui.js";
 import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
 import { openReidentify } from "./reid.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
@@ -17,10 +17,6 @@ function queueOperation(view, type, fields, label) {
   const box = view.querySelector("#title-notice");
   const verb = replaced ? "Cambio actualizado en la cola" : "Añadido a la cola";
   box.innerHTML = `<p class="add__hint">${verb} (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>`;
-}
-
-function checked(form, name) {
-  return [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
 }
 
 function renderEditForm(row, item, link, meta) {

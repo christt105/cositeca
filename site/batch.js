@@ -1,14 +1,12 @@
 import { issueUrl } from "./rules.js";
-import { esc } from "./ui.js";
+import { esc, byIdIn } from "./ui.js";
 import { getQueue, removeAt, clear } from "./queue.js";
 
 const view = document.getElementById("view-batch");
 const URL_LENGTH_THRESHOLD = 6500;
 const MAX_OPERATIONS = 50;
 
-function $(id) {
-  return view.querySelector(`#${id}`);
-}
+const $ = byIdIn(view);
 
 function renderRow(item, index) {
   return `

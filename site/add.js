@@ -8,7 +8,7 @@ import {
   issueUrl,
   newLanguageError,
 } from "./rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
 const view = document.getElementById("view-add");
@@ -55,9 +55,7 @@ export function nameOf(result) {
   return result.title || result.name || "";
 }
 
-function $(id) {
-  return view.querySelector(`#${id}`);
-}
+const $ = byIdIn(view);
 
 export async function renderAdd(params, context) {
   ctx = context;
@@ -376,10 +374,6 @@ export function validateLink(link) {
   return "";
 }
 
-function checked(name) {
-  return [...view.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
-}
-
 function buildAddFields() {
   const link = $("add-link").value.trim();
   const error = validateLink(link);
@@ -396,8 +390,8 @@ function buildAddFields() {
     tmdb: tmdbUrl(toSiteType(selected.type), selected.id),
     quality: $("add-quality").value,
     season: seasonValue,
-    audio: checked("audio").join(", "),
-    subs: checked("subs").join(", "),
+    audio: checked(view, "audio").join(", "),
+    subs: checked(view, "subs").join(", "),
     new_audio_language: newAudio,
     new_subs_language: newSubs,
     tags: $("add-tags").value.trim(),

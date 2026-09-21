@@ -23,3 +23,13 @@ export function renderChips(values, className) {
     .map((v) => `<span class="chip ${className}">${esc(v)}</span>`)
     .join("");
 }
+
+/** Finder for elements by id inside `root`. */
+export function byIdIn(root) {
+  return (id) => root.querySelector(`#${id}`);
+}
+
+/** Values of the checked inputs named `name` inside `root`. */
+export function checked(root, name) {
+  return [...root.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
+}
