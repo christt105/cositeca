@@ -12,6 +12,7 @@ import {
   sanitizeNewLanguage,
   createTmdbClient,
 } from "./lib.js";
+import { linkKey } from "../site/rules.js";
 import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
 
 export const FIELD_LABELS = {
@@ -101,6 +102,11 @@ function applyNewLanguage(raw, list, languages) {
   return { values: [resolved], changed };
 }
 
+function isKnownLink(existingLinks, link) {
+  const key = linkKey(link);
+  return [...existingLinks].some((known) => linkKey(known) === key);
+}
+
 export async function processAdd(fields, { qualities, groups, languages, tmdbClient, existingLinks, fileExists, readFile }) {
   requireTextFields(fields);
   const season = parseSeasonField(fields.season);
@@ -109,7 +115,7 @@ export async function processAdd(fields, { qualities, groups, languages, tmdbCli
   const kind = target.type === "movie" ? "movie" : "series";
   const dir = target.type === "movie" ? "movies" : "series";
 
-  if (existingLinks.has(fields.link)) {
+  if (isKnownLink(existingLinks, fields.link)) {
     throw new ValidationError(`link already exists in the catalog: ${fields.link}`);
   }
 
@@ -202,7 +208,7 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
   if (deleted) {
     data.links.splice(idx, 1);
   } else {
-    if (newLink !== fields.old_link && existingLinks.has(newLink)) {
+    if (linkKey(newLink) !== linkKey(fields.old_link) && isKnownLink(existingLinks, newLink)) {
       throw new ValidationError(`link already exists in the catalog: ${newLink}`);
     }
     const updated = { ...oldEntry, link: newLink };

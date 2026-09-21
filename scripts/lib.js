@@ -8,12 +8,29 @@ import {
   cleanNewLanguage,
   newLanguageError,
   normalizeText,
+  linkKey,
 } from "../site/rules.js";
 
 export { TELEGRAM_LINK_RE, TMDB_URL_RE, TMDB_ID_RE, IMDB_ID_RE };
 export const FILENAME_RE = /^\d+\.yaml$/;
 
 export class ValidationError extends Error {}
+
+/**
+ * Registry of links by linkKey. `add(link, path)` returns the path that
+ * already holds the same link, or undefined after registering it.
+ */
+export function createLinkIndex() {
+  const seen = new Map();
+  return {
+    add(link, path) {
+      const key = linkKey(link);
+      if (seen.has(key)) return seen.get(key);
+      seen.set(key, path);
+      return undefined;
+    },
+  };
+}
 
 export function parseTelegramLink(link) {
   if (typeof link !== "string") {

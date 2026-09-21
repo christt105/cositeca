@@ -63,6 +63,15 @@ export function telegramMessageId(link) {
   return match ? match[3] : "";
 }
 
+/**
+ * Identity of a t.me link, ignoring its topic: the link rebuilt from its
+ * group and message id. A string that is not a t.me/c link is its own identity.
+ */
+export function linkKey(link) {
+  const match = TELEGRAM_LINK_RE.exec(link ?? "");
+  return match ? `https://t.me/c/${match[1]}/${match[3]}` : link;
+}
+
 function normalizeVersionList(values) {
   return [...new Set(values ?? [])].sort();
 }

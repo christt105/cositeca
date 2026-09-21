@@ -5,6 +5,7 @@ import {
   createTmdbClient,
   loadTmdbCache,
   saveTmdbCache,
+  createLinkIndex,
 } from "./lib.js";
 import { findIndistinguishableVersions } from "../site/rules.js";
 
@@ -24,7 +25,7 @@ if (!tmdbClient) {
 
 let errors = 0;
 let warnings = 0;
-const seenLinks = new Map();
+const linkIndex = createLinkIndex();
 
 for (const type of ["movies", "series"]) {
   let filenames;
@@ -39,11 +40,10 @@ for (const type of ["movies", "series"]) {
       const data = load(readFileSync(path, "utf8"));
       validateTitleFile(type, filename, data, { qualities, groups, languages });
       for (const entry of data.links) {
-        const { link } = entry;
-        if (seenLinks.has(link)) {
-          throw new Error(`duplicate link, also used in ${seenLinks.get(link)}`);
+        const earlier = linkIndex.add(entry.link, path);
+        if (earlier !== undefined) {
+          throw new Error(`duplicate link, also used in ${earlier}`);
         }
-        seenLinks.set(link, path);
       }
       for (const group of findIndistinguishableVersions(data.links)) {
         const links = group.map((entry) => entry.link).join(", ");
