@@ -446,6 +446,31 @@ describe("createTmdbClient", () => {
     assert.equal(calls, 1);
   });
 
+  test("falls back to an expired entry when the refetch fails", async () => {
+    const cache = { "movie:550": { fetchedAt: 0, value: { id: 550, title: "stale" } } };
+    await withFetch(
+      async () => ({ ok: false, status: 503, statusText: "Service Unavailable", json: async () => ({}) }),
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => TMDB_CACHE_TTL_MS });
+        assert.equal((await client.getMovie(550)).title, "stale");
+      }
+    );
+    assert.deepEqual(cache, { "movie:550": { fetchedAt: 0, value: { id: 550, title: "stale" } } });
+  });
+
+  test("falls back to a legacy entry when the refetch fails", async () => {
+    const cache = { "movie:550": { id: 550, title: "stale" } };
+    await withFetch(
+      async () => {
+        throw new Error("network down");
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache });
+        assert.equal((await client.getMovie(550)).title, "stale");
+      }
+    );
+  });
+
   test("purgeTmdbCache drops keys that were not used this run", async () => {
     const cache = {
       "movie:550": { fetchedAt: 0, value: { id: 550 } },

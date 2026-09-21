@@ -266,10 +266,17 @@ export function createTmdbClient(apiKey, { cache = {}, now = () => Date.now() } 
   async function cached(key, fetcher) {
     usedKeys.add(key);
     const entry = cache[key];
-    if (entry && typeof entry.fetchedAt === "number" && now() - entry.fetchedAt < TMDB_CACHE_TTL_MS) {
+    const wrapped = entry && typeof entry.fetchedAt === "number";
+    if (wrapped && now() - entry.fetchedAt < TMDB_CACHE_TTL_MS) {
       return entry.value;
     }
-    const value = await fetcher();
+    let value;
+    try {
+      value = await fetcher();
+    } catch (err) {
+      if (entry === undefined) throw err;
+      return wrapped ? entry.value : entry;
+    }
     cache[key] = { fetchedAt: now(), value };
     return value;
   }
