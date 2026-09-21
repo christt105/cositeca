@@ -29,7 +29,8 @@ synopses). Deployed on GitHub Pages.
 - New entries, link fixes/deletions and poster changes come in through
   GitHub Issue forms (`add.yml`, `fix.yml`, `poster.yml`, `reidentify.yml`, told apart by
   their `add`/`fix`/`poster` label), processed by
-  `.github/workflows/add-entry.yml`, which commits directly to `main`. The
+  `.github/workflows/add-entry.yml`, which pushes a `bot/entry-<issue>`
+  branch, opens a PR, and squash-merges it once `validate.yml` passes. The
   title page and the add page open those forms with every field prefilled
   by query string, so users only review and submit. Both issue workflows
   (`add-entry.yml` and `batch.yml`) run on `opened` and `edited`, but only
