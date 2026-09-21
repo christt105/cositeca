@@ -6,6 +6,7 @@ import {
   createTmdbClient,
   loadTmdbCache,
   saveTmdbCache,
+  purgeTmdbCache,
   parseAddedTimestamps,
 } from "./lib.js";
 
@@ -197,6 +198,7 @@ async function main() {
   }
   writeFileSync("site/catalog.json", JSON.stringify(catalog));
   writeFileSync("site/meta.json", JSON.stringify({ qualities, languages, groups }));
+  purgeTmdbCache(tmdbCache, tmdb.usedKeys);
   saveTmdbCache(cachePath, tmdbCache);
   console.log(
     `build: wrote ${catalog.length} titles to site/catalog.json, site/meta.json and site/titles/`

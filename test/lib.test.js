@@ -13,6 +13,8 @@ import {
   validateSeasonPosters,
   validateLinkEntry,
   createTmdbClient,
+  purgeTmdbCache,
+  TMDB_CACHE_TTL_MS,
   resolveTmdbTarget,
   parseAddedTimestamps,
 } from "../scripts/lib.js";
@@ -389,26 +391,75 @@ describe("createTmdbClient", () => {
         return okResponse({ id: 550 });
       },
       async () => {
-        const client = createTmdbClient("plain-key", { cache });
+        const client = createTmdbClient("plain-key", { cache, now: () => 1000 });
         await client.getMovie(550);
         await client.getMovie(550);
       }
     );
     assert.equal(calls, 1);
-    assert.deepEqual(cache, { "movie:550": { id: 550 } });
+    assert.deepEqual(cache, { "movie:550": { fetchedAt: 1000, value: { id: 550 } } });
   });
 
-  test("known limitation: cached values never expire", async () => {
-    const cache = { "movie:550": { id: 550, title: "stale" } };
+  test("reuses a fresh cache entry without refetching", async () => {
+    const cache = { "movie:550": { fetchedAt: 1000, value: { id: 550, title: "fresh" } } };
     await withFetch(
       async () => {
         throw new Error("should not reach the network");
       },
       async () => {
-        const client = createTmdbClient("plain-key", { cache });
-        assert.equal((await client.getMovie(550)).title, "stale");
+        const client = createTmdbClient("plain-key", { cache, now: () => 1000 + TMDB_CACHE_TTL_MS - 1 });
+        assert.equal((await client.getMovie(550)).title, "fresh");
       }
     );
+  });
+
+  test("refetches an entry older than the 30 day cache expiry", async () => {
+    const cache = { "movie:550": { fetchedAt: 0, value: { id: 550, title: "stale" } } };
+    let calls = 0;
+    await withFetch(
+      async () => {
+        calls++;
+        return okResponse({ id: 550, title: "fresh" });
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => TMDB_CACHE_TTL_MS });
+        assert.equal((await client.getMovie(550)).title, "fresh");
+      }
+    );
+    assert.equal(calls, 1);
+    assert.equal(cache["movie:550"].value.title, "fresh");
+  });
+
+  test("refetches a legacy entry stored without fetchedAt", async () => {
+    const cache = { "movie:550": { id: 550, title: "stale" } };
+    let calls = 0;
+    await withFetch(
+      async () => {
+        calls++;
+        return okResponse({ id: 550, title: "fresh" });
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache });
+        assert.equal((await client.getMovie(550)).title, "fresh");
+      }
+    );
+    assert.equal(calls, 1);
+  });
+
+  test("purgeTmdbCache drops keys that were not used this run", async () => {
+    const cache = {
+      "movie:550": { fetchedAt: 0, value: { id: 550 } },
+      "movie:1": { fetchedAt: 0, value: { id: 1, title: "deleted title" } },
+    };
+    await withFetch(
+      async () => okResponse({ id: 550 }),
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => 0 });
+        await client.getMovie(550);
+        purgeTmdbCache(cache, client.usedKeys);
+      }
+    );
+    assert.deepEqual(Object.keys(cache), ["movie:550"]);
   });
 
   test("throws a plain Error (not a ValidationError) on a failed response", async () => {

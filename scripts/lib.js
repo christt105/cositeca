@@ -232,8 +232,19 @@ export function saveTmdbCache(path, cache) {
   writeFileSync(path, JSON.stringify(cache));
 }
 
-export function createTmdbClient(apiKey, { cache = {} } = {}) {
+export function purgeTmdbCache(cache, usedKeys) {
+  for (const key of Object.keys(cache)) {
+    if (!usedKeys.has(key)) {
+      delete cache[key];
+    }
+  }
+}
+
+export const TMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function createTmdbClient(apiKey, { cache = {}, now = () => Date.now() } = {}) {
   const useBearer = apiKey.startsWith("eyJ");
+  const usedKeys = new Set();
   async function request(path, params = {}) {
     const url = new URL(`https://api.themoviedb.org/3${path}`);
     url.searchParams.set("language", "es-ES");
@@ -253,14 +264,17 @@ export function createTmdbClient(apiKey, { cache = {} } = {}) {
     return res.json();
   }
   async function cached(key, fetcher) {
-    if (Object.prototype.hasOwnProperty.call(cache, key)) {
-      return cache[key];
+    usedKeys.add(key);
+    const entry = cache[key];
+    if (entry && typeof entry.fetchedAt === "number" && now() - entry.fetchedAt < TMDB_CACHE_TTL_MS) {
+      return entry.value;
     }
     const value = await fetcher();
-    cache[key] = value;
+    cache[key] = { fetchedAt: now(), value };
     return value;
   }
   return {
+    usedKeys,
     getMovie: (id) => cached(`movie:${id}`, () => request(`/movie/${id}`)),
     getTv: (id) => cached(`tv:${id}`, () => request(`/tv/${id}`)),
     getTvExternalIds: (id) =>
