@@ -385,6 +385,39 @@ export function checkAntiSpam(createdAt, openEntryIssueCount) {
   return null;
 }
 
+export const INTERNAL_ERROR_LABEL = "bug";
+export const INTERNAL_ERROR_MESSAGE =
+  "Error interno al procesar la petición. No es culpa tuya: alguien lo revisará a mano.";
+
+/**
+ * Reports a failed run on its issue. A ValidationError is explained to the
+ * author and labelled invalid. Any other error gets a generic internal-error
+ * comment and label, deletes the bot branch if it was pushed without a PR,
+ * and is rethrown so the job still fails. Each cleanup step is best effort.
+ */
+export function reportFailure(err, { issueNumber, branch, pushed, prCreated, gh, git }) {
+  if (err instanceof ValidationError) {
+    gh(["issue", "comment", issueNumber, "--body", err.message]);
+    gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
+    return;
+  }
+  const steps = [
+    () => gh(["issue", "comment", issueNumber, "--body", INTERNAL_ERROR_MESSAGE]),
+    () => gh(["issue", "edit", issueNumber, "--add-label", INTERNAL_ERROR_LABEL]),
+  ];
+  if (pushed && !prCreated) {
+    steps.push(() => git(["push", "origin", "--delete", branch]));
+  }
+  for (const step of steps) {
+    try {
+      step();
+    } catch (cleanupErr) {
+      console.error(`failure reporting step failed: ${cleanupErr.message}`);
+    }
+  }
+  throw err;
+}
+
 export function collectExistingLinks() {
   const links = new Set();
   for (const dir of ["movies", "series"]) {
@@ -418,12 +451,22 @@ async function main() {
   const issueLabel = ["fix", "poster", "reidentify"].find((l) => issueLabels.includes(l)) ?? "add";
   const body = process.env.ISSUE_BODY;
 
+  const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
+  const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+  const progress = { branch: `bot/entry-${issueNumber}`, pushed: false, prCreated: false };
+
+  try {
+    await run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress });
+  } catch (err) {
+    reportFailure(err, { issueNumber, ...progress, gh, git });
+  }
+}
+
+async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
   const qualities = load(readFileSync("qualities.yaml", "utf8"));
   const groups = load(readFileSync("groups.yaml", "utf8"));
   const languages = load(readFileSync("languages.yaml", "utf8"));
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
-
-  const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
 
   const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));
   const openCountOut = gh([
@@ -439,102 +482,94 @@ async function main() {
 
   const existingLinks = collectExistingLinks();
 
+  let result;
+  if (issueLabel === "add") {
+    const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "new_audio_language", "new_subs_language", "tags", "poster", "link"]);
+    result = await processAdd(fields, {
+      qualities,
+      groups,
+      languages,
+      tmdbClient,
+      existingLinks,
+      fileExists: existsSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  } else if (issueLabel === "poster") {
+    const fields = parseIssueBody(body, ["tmdb", "poster"]);
+    result = await processPoster(fields, {
+      tmdbClient,
+      fileExists: existsSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  } else if (issueLabel === "reidentify") {
+    const fields = parseIssueBody(body, ["tmdb", "new_tmdb", "old_link", "season", "poster"]);
+    result = await processReidentify(fields, {
+      qualities,
+      groups,
+      languages,
+      tmdbClient,
+      fileExists: existsSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  } else {
+    const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "new_audio_language", "new_subs_language", "season", "tags"]);
+    result = processFix(fields, {
+      qualities,
+      groups,
+      languages,
+      existingLinks,
+      readdir: readdirSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  }
+
+  for (const { filePath, content } of resultFiles(result)) {
+    if (content === null) unlinkSync(filePath);
+    else writeFileSync(filePath, content);
+  }
+  if (result.languagesChanged) {
+    writeFileSync("languages.yaml", dump(languages));
+  }
+
+  const { subject, close } = describeResult(issueLabel, result);
+
+  const { branch } = progress;
+  git(["config", "user.name", "cositeca-bot"]);
+  git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
+  git(["checkout", "-b", branch]);
+  git(["add", "-A"]);
+  git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
+  git(["push", "-u", "origin", branch]);
+  progress.pushed = true;
+
+  gh(["workflow", "run", "validate.yml", "--ref", branch]);
+  const runId = await findRunId(gh, "validate.yml", branch);
+
+  const prUrl = gh([
+    "pr", "create", "--base", "main", "--head", branch,
+    "--title", subject, "--body", `Closes #${issueNumber}`,
+  ]).trim();
+  progress.prCreated = true;
+  const prNumber = prUrl.split("/").pop();
+
   try {
-    let result;
-    if (issueLabel === "add") {
-      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "new_audio_language", "new_subs_language", "tags", "poster", "link"]);
-      result = await processAdd(fields, {
-        qualities,
-        groups,
-        languages,
-        tmdbClient,
-        existingLinks,
-        fileExists: existsSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    } else if (issueLabel === "poster") {
-      const fields = parseIssueBody(body, ["tmdb", "poster"]);
-      result = await processPoster(fields, {
-        tmdbClient,
-        fileExists: existsSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    } else if (issueLabel === "reidentify") {
-      const fields = parseIssueBody(body, ["tmdb", "new_tmdb", "old_link", "season", "poster"]);
-      result = await processReidentify(fields, {
-        qualities,
-        groups,
-        languages,
-        tmdbClient,
-        fileExists: existsSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    } else {
-      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "new_audio_language", "new_subs_language", "season", "tags"]);
-      result = processFix(fields, {
-        qualities,
-        groups,
-        languages,
-        existingLinks,
-        readdir: readdirSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    }
-
-    for (const { filePath, content } of resultFiles(result)) {
-      if (content === null) unlinkSync(filePath);
-      else writeFileSync(filePath, content);
-    }
-    if (result.languagesChanged) {
-      writeFileSync("languages.yaml", dump(languages));
-    }
-
-    const { subject, close } = describeResult(issueLabel, result);
-
-    const git = (args) => execFileSync("git", args, { encoding: "utf8" });
-    const branch = `bot/entry-${issueNumber}`;
-    git(["config", "user.name", "cositeca-bot"]);
-    git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
-    git(["checkout", "-b", branch]);
-    git(["add", "-A"]);
-    git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
-    git(["push", "-u", "origin", branch]);
-
-    gh(["workflow", "run", "validate.yml", "--ref", branch]);
-    const runId = await findRunId(gh, "validate.yml", branch);
-
-    const prUrl = gh([
-      "pr", "create", "--base", "main", "--head", branch,
-      "--title", subject, "--body", `Closes #${issueNumber}`,
-    ]).trim();
-    const prNumber = prUrl.split("/").pop();
-
-    try {
-      gh(["run", "watch", String(runId), "--exit-status"]);
-    } catch {
-      gh([
-        "issue", "comment", issueNumber, "--body",
-        "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
-      ]);
-      return;
-    }
-
-    gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
-    gh(["workflow", "run", "deploy.yml"]);
+    gh(["run", "watch", String(runId), "--exit-status"]);
+  } catch {
     gh([
       "issue", "comment", issueNumber, "--body",
-      `${close} La web se actualiza en un par de minutos.`,
+      "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
     ]);
-    if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
-      gh(["issue", "close", issueNumber]);
-    }
-  } catch (err) {
-    if (err instanceof ValidationError) {
-      gh(["issue", "comment", issueNumber, "--body", err.message]);
-      gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
-    } else {
-      throw err;
-    }
+    return;
+  }
+
+  gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
+  gh(["workflow", "run", "deploy.yml"]);
+  gh([
+    "issue", "comment", issueNumber, "--body",
+    `${close} La web se actualiza en un par de minutos.`,
+  ]);
+  if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
+    gh(["issue", "close", issueNumber]);
   }
 }
 

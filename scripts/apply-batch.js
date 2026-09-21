@@ -11,6 +11,7 @@ import {
   describeResult,
   collectExistingLinks,
   checkAntiSpam,
+  reportFailure,
 } from "./add-entry.js";
 
 export const MAX_OPERATIONS = 50;
@@ -178,8 +179,19 @@ async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
   const body = process.env.ISSUE_BODY || "";
-  const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
   const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
+  const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+  const progress = { branch: `bot/entry-batch-${issueNumber}`, pushed: false, prCreated: false };
+
+  try {
+    await run({ issueNumber, issueAuthor, body, gh, git, progress });
+  } catch (err) {
+    reportFailure(err, { issueNumber, ...progress, gh, git });
+  }
+}
+
+async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
+  const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 
   const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));
   const openCount = JSON.parse(gh([
@@ -192,97 +204,89 @@ async function main() {
     return;
   }
 
-  try {
-    const json = extractOperationsJson(body);
-    if (!json) {
-      throw new ValidationError("no se ha encontrado ningún JSON de operaciones en el issue");
-    }
-    const ops = parseOperations(json);
+  const json = extractOperationsJson(body);
+  if (!json) {
+    throw new ValidationError("no se ha encontrado ningún JSON de operaciones en el issue");
+  }
+  const ops = parseOperations(json);
 
-    const qualities = load(readFileSync("qualities.yaml", "utf8"));
-    const groups = load(readFileSync("groups.yaml", "utf8"));
-    const languages = load(readFileSync("languages.yaml", "utf8"));
-    const fs = makeOverlayFs();
+  const qualities = load(readFileSync("qualities.yaml", "utf8"));
+  const groups = load(readFileSync("groups.yaml", "utf8"));
+  const languages = load(readFileSync("languages.yaml", "utf8"));
+  const fs = makeOverlayFs();
 
-    const result = await applyBatch(ops, { qualities, groups, languages, tmdbClient, fs });
+  const result = await applyBatch(ops, { qualities, groups, languages, tmdbClient, fs });
 
-    for (const reason of result.skipped) console.warn(`skip: ${reason}`);
+  for (const reason of result.skipped) console.warn(`skip: ${reason}`);
 
-    if (result.applied.length === 0) {
-      gh([
-        "issue", "comment", issueNumber, "--body",
-        `Ninguna operación se pudo aplicar (${result.skipped.length} omitida(s)). No se ha creado ningún PR.`,
-      ]);
-      gh(["issue", "close", issueNumber]);
-      return;
-    }
-
-    fs.flush();
-    if (result.languagesChanged) {
-      writeFileSync("languages.yaml", dump(languages));
-    }
-
-    const git = (args) => execFileSync("git", args, { encoding: "utf8" });
-    const branch = `bot/entry-batch-${issueNumber}`;
-    git(["config", "user.name", "cositeca-bot"]);
-    git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
-    git(["checkout", "-b", branch]);
-    git(["add", "-A"]);
-    const subject = `feat: batch changes (#${issueNumber})`;
-    git(["commit", "-m", subject, "-m", `${result.applied.length} operation(s) applied, ref #${issueNumber}`]);
-    git(["push", "-u", "origin", branch]);
-
-    gh(["workflow", "run", "validate.yml", "--ref", branch]);
-    const runId = await findRunId(gh, "validate.yml", branch);
-
-    const prBodyParts = [
-      `Ref #${issueNumber}`,
-      "",
-      `${result.applied.length} operación(es) aplicada(s):`,
-      ...result.applied.map((a) => `- ${a}`),
-    ];
-    if (result.skipped.length) {
-      prBodyParts.push(
-        "",
-        `${result.skipped.length} operación(es) omitida(s):`,
-        ...result.skipped.map((s) => `- ${s}`)
-      );
-    }
-    prBodyParts.push(
-      "",
-      "Este PR requiere revisión y merge manual: la validación automática que pasa no lo mergea solo."
-    );
-
-    const prUrl = gh([
-      "pr", "create", "--base", "main", "--head", branch,
-      "--title", subject, "--body", prBodyParts.join("\n"),
-    ]).trim();
-    const prNumber = prUrl.split("/").pop();
-
-    try {
-      gh(["run", "watch", String(runId), "--exit-status"]);
-    } catch {
-      gh([
-        "issue", "comment", issueNumber, "--body",
-        `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
-      ]);
-      return;
-    }
-
+  if (result.applied.length === 0) {
     gh([
       "issue", "comment", issueNumber, "--body",
-      `${result.applied.length} operación(es) aplicada(s) y validada(s), esperando revisión manual antes de mergear: ${prUrl} (PR #${prNumber}).`,
+      `Ninguna operación se pudo aplicar (${result.skipped.length} omitida(s)). No se ha creado ningún PR.`,
     ]);
-    if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
-      gh(["issue", "close", issueNumber]);
-    }
-  } catch (err) {
-    if (err instanceof ValidationError) {
-      gh(["issue", "comment", issueNumber, "--body", err.message]);
-      gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
-    } else {
-      throw err;
-    }
+    gh(["issue", "close", issueNumber]);
+    return;
+  }
+
+  fs.flush();
+  if (result.languagesChanged) {
+    writeFileSync("languages.yaml", dump(languages));
+  }
+
+  const { branch } = progress;
+  git(["config", "user.name", "cositeca-bot"]);
+  git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
+  git(["checkout", "-b", branch]);
+  git(["add", "-A"]);
+  const subject = `feat: batch changes (#${issueNumber})`;
+  git(["commit", "-m", subject, "-m", `${result.applied.length} operation(s) applied, ref #${issueNumber}`]);
+  git(["push", "-u", "origin", branch]);
+  progress.pushed = true;
+
+  gh(["workflow", "run", "validate.yml", "--ref", branch]);
+  const runId = await findRunId(gh, "validate.yml", branch);
+
+  const prBodyParts = [
+    `Ref #${issueNumber}`,
+    "",
+    `${result.applied.length} operación(es) aplicada(s):`,
+    ...result.applied.map((a) => `- ${a}`),
+  ];
+  if (result.skipped.length) {
+    prBodyParts.push(
+      "",
+      `${result.skipped.length} operación(es) omitida(s):`,
+      ...result.skipped.map((s) => `- ${s}`)
+    );
+  }
+  prBodyParts.push(
+    "",
+    "Este PR requiere revisión y merge manual: la validación automática que pasa no lo mergea solo."
+  );
+
+  const prUrl = gh([
+    "pr", "create", "--base", "main", "--head", branch,
+    "--title", subject, "--body", prBodyParts.join("\n"),
+  ]).trim();
+  progress.prCreated = true;
+  const prNumber = prUrl.split("/").pop();
+
+  try {
+    gh(["run", "watch", String(runId), "--exit-status"]);
+  } catch {
+    gh([
+      "issue", "comment", issueNumber, "--body",
+      `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
+    ]);
+    return;
+  }
+
+  gh([
+    "issue", "comment", issueNumber, "--body",
+    `${result.applied.length} operación(es) aplicada(s) y validada(s), esperando revisión manual antes de mergear: ${prUrl} (PR #${prNumber}).`,
+  ]);
+  if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
+    gh(["issue", "close", issueNumber]);
   }
 }
 
