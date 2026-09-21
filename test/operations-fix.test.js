@@ -122,12 +122,33 @@ describe("processFix: updating a link", () => {
   });
 
   test("an empty audio or subs field keeps the stored value", () => {
-    const { ctx } = deps();
+    const { ctx } = deps({
+      files: {
+        "movies/550.yaml": yaml({
+          title: "El club de la lucha",
+          links: [{ quality: "1080p", audio: ["Castellano"], subs: ["Inglés"], link: link(1) }],
+        }),
+      },
+    });
     const result = processFix(
       { old_link: link(1), new_link: link(1), audio: "", subs: "" },
       ctx
     );
-    assert.deepEqual(load(result.content).links[0].audio, ["Castellano"]);
+    assert.deepEqual(load(result.content).links[0], {
+      quality: "1080p",
+      audio: ["Castellano"],
+      subs: ["Inglés"],
+      link: link(1),
+    });
+  });
+
+  test("\"-\" combined with a new audio language replaces the audio with it", () => {
+    const { ctx } = deps();
+    const result = processFix(
+      { old_link: link(1), new_link: link(1), audio: "-", new_audio_language: "Alemán" },
+      ctx
+    );
+    assert.deepEqual(load(result.content).links[0].audio, ["Alemán"]);
   });
 
   test("clears the audio with the \"-\" convention", () => {
