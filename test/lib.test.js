@@ -14,6 +14,7 @@ import {
   validateLinkEntry,
   createTmdbClient,
   resolveTmdbTarget,
+  parseAddedTimestamps,
 } from "../scripts/lib.js";
 import { config, fakeTmdb, GROUP_ID, link } from "./fixtures.js";
 
@@ -462,5 +463,26 @@ describe("resolveTmdbTarget", () => {
       () => resolveTmdbTarget({ source: "imdb", imdbId: "tt9999999" }, client),
       ValidationError
     );
+  });
+});
+
+describe("parseAddedTimestamps", () => {
+  test("maps each added path to its commit timestamp", () => {
+    const output = "\x00300\n\nmovies/550.yaml\nseries/1396.yaml\n\x00200\n\nmovies/680.yaml\n";
+    assert.deepEqual(
+      parseAddedTimestamps(output),
+      new Map([["movies/550.yaml", 300], ["series/1396.yaml", 300], ["movies/680.yaml", 200]])
+    );
+  });
+
+  test("a path deleted and added again keeps the date of its latest addition", () => {
+    const output = "\x00500\n\nmovies/550.yaml\n\x00300\n\nmovies/680.yaml\n\x00100\n\nmovies/550.yaml\n";
+    assert.equal(parseAddedTimestamps(output).get("movies/550.yaml"), 500);
+    assert.equal(parseAddedTimestamps(output).get("movies/680.yaml"), 300);
+  });
+
+  test("ignores paths before the first commit header and empty output", () => {
+    assert.deepEqual(parseAddedTimestamps("movies/1.yaml\n\x00100\n\nmovies/2.yaml\n"), new Map([["movies/2.yaml", 100]]));
+    assert.deepEqual(parseAddedTimestamps(""), new Map());
   });
 });

@@ -193,6 +193,24 @@ export function validateTitleFile(type, filename, data, { qualities, groups, lan
   }
 }
 
+/**
+ * Maps each path to the timestamp of its latest addition, from the output of
+ * `git log --no-renames --diff-filter=A --name-only --format=%x00%at`, which
+ * lists commits newest first with each header line starting with a NUL.
+ */
+export function parseAddedTimestamps(output) {
+  const timestamps = new Map();
+  let currentTimestamp = null;
+  for (const line of output.split("\n")) {
+    if (line.startsWith("\0")) {
+      currentTimestamp = Number(line.slice(1));
+    } else if (line.trim() && currentTimestamp !== null && !timestamps.has(line)) {
+      timestamps.set(line, currentTimestamp);
+    }
+  }
+  return timestamps;
+}
+
 export function loadTmdbCache(path) {
   try {
     return JSON.parse(readFileSync(path, "utf8"));

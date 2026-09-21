@@ -6,6 +6,7 @@ import {
   createTmdbClient,
   loadTmdbCache,
   saveTmdbCache,
+  parseAddedTimestamps,
 } from "./lib.js";
 
 const groups = load(readFileSync("groups.yaml", "utf8"));
@@ -152,18 +153,7 @@ function getAddedTimestamps() {
     ["log", "--no-renames", "--diff-filter=A", "--name-only", "--format=%x00%at"],
     { maxBuffer: 1024 * 1024 * 200 }
   ).toString();
-  const timestamps = new Map();
-  let currentTimestamp = null;
-  for (const line of output.split("\n")) {
-    if (line.startsWith("\0")) {
-      currentTimestamp = Number(line.slice(1));
-    } else if (line.trim() && currentTimestamp !== null) {
-      // git log walks newest to oldest, so the last write for a given path
-      // (from the oldest commit that added it) is the one that sticks.
-      timestamps.set(line, currentTimestamp);
-    }
-  }
-  return timestamps;
+  return parseAddedTimestamps(output);
 }
 
 async function main() {
