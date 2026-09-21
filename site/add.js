@@ -161,7 +161,7 @@ function renderResults(items) {
       const inCatalog = ctx.byKey.has(catalogKey(r.media_type, r.id));
       return `
         <button type="button" class="result" data-type="${r.media_type}" data-id="${r.id}">
-          <img class="result__poster" src="${r.poster_path ? `${IMG}/w92${r.poster_path}` : ""}" alt="" loading="lazy">
+          <img class="result__poster" src="${r.poster_path ? esc(`${IMG}/w92${r.poster_path}`) : ""}" alt="" loading="lazy">
           <span class="result__info">
             <span class="result__title">${esc(nameOf(r))}</span>
             <span class="result__meta">${typeIcon(type)} ${TYPE_LABELS[type]} ${esc(yearOf(r))}${inCatalog ? ' <span class="chip">Ya en la Cositeca</span>' : ""}</span>
@@ -252,8 +252,8 @@ export async function renderPosterPicker(box, type, id, defaultPoster, onChoose)
       </button>
       ${posters
         .map((p) => `
-          <button type="button" class="poster" data-poster="${IMG}/w342${p.file_path}">
-            <img src="${IMG}/w185${p.file_path}" alt="" loading="lazy"><span>${p.iso_639_1 ?? "sin texto"}</span>
+          <button type="button" class="poster" data-poster="${esc(`${IMG}/w342${p.file_path}`)}">
+            <img src="${esc(`${IMG}/w185${p.file_path}`)}" alt="" loading="lazy"><span>${esc(p.iso_639_1 ?? "sin texto")}</span>
           </button>`)
         .join("")}
     </div>

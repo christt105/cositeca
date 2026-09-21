@@ -1,7 +1,7 @@
 export const TELEGRAM_LINK_RE = /^https:\/\/t\.me\/c\/(\d+)\/(?:(\d+)\/)?(\d+)$/;
-export const TMDB_URL_RE = /^https?:\/\/(?:www\.)?themoviedb\.org\/(movie|tv)\/(\d+)(?:-.*)?$/;
+export const TMDB_URL_RE = /^https?:\/\/(?:www\.)?themoviedb\.org\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?(movie|tv)\/(\d+)(?:-[^/?#]*)?(?:\/season\/\d+)?\/?(?:[?#].*)?$/;
 export const TMDB_ID_RE = /^tmdb:(\d+)$/;
-export const IMDB_ID_RE = /^tt\d+$/;
+export const IMDB_ID_RE = /^tt\d{1,12}$/;
 export const NEW_LANGUAGE_RE = /^[\p{L}\p{M}\s]{2,30}$/u;
 
 export const REPO_URL = "https://github.com/christt105/cositeca";

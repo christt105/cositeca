@@ -29,7 +29,7 @@ function renderResults(results) {
   return results
     .map((r) => `
       <button type="button" class="result" data-type="${r.media_type}" data-id="${r.id}">
-        <img class="result__poster" src="${r.poster_path ? `${IMG}/w92${r.poster_path}` : ""}" alt="" loading="lazy">
+        <img class="result__poster" src="${r.poster_path ? esc(`${IMG}/w92${r.poster_path}`) : ""}" alt="" loading="lazy">
         <span class="result__info">
           <span class="result__title">${esc(nameOf(r))}</span>
           <span class="result__meta">${typeIcon(siteType(r.media_type))} ${TYPE_LABELS[siteType(r.media_type)]} ${esc(yearOf(r))}</span>

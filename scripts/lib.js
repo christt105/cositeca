@@ -127,10 +127,15 @@ export function sanitizeNewLanguage(raw, existing) {
   return existingMatch ?? value;
 }
 
+const HTTPS_URL_RE = /^https:\/\/[^\s/?#@]+(?:[/?#]\S*)?$/;
+
 export function validatePoster(poster) {
   if (poster === undefined) return;
   if (typeof poster !== "string" || poster.trim() === "") {
     throw new ValidationError("poster must be a non-empty string");
+  }
+  if (!HTTPS_URL_RE.test(poster)) {
+    throw new ValidationError(`poster must be an https:// URL, got ${poster}`);
   }
 }
 
@@ -150,6 +155,9 @@ export function validateSeasonPosters(seasonPosters, type) {
     }
     if (typeof poster !== "string" || poster.trim() === "") {
       throw new ValidationError(`seasonPosters["${season}"] must be a non-empty string`);
+    }
+    if (!HTTPS_URL_RE.test(poster)) {
+      throw new ValidationError(`seasonPosters["${season}"] must be an https:// URL, got ${poster}`);
     }
   }
 }

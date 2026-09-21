@@ -95,12 +95,13 @@ describe("parseTmdbInput", () => {
     });
   });
 
-  test("known limitation: TMDB URLs with a trailing slash, a language prefix or a season are rejected", () => {
-    assert.throws(() => parseTmdbInput("https://www.themoviedb.org/movie/550/"), ValidationError);
-    assert.throws(() => parseTmdbInput("https://www.themoviedb.org/es/movie/550"), ValidationError);
-    assert.throws(
-      () => parseTmdbInput("https://www.themoviedb.org/tv/1396/season/1"),
-      ValidationError
+  test("accepts TMDB URLs with a trailing slash, a language prefix or a season, ignoring the season", () => {
+    const movie = { source: "url", type: "movie", id: 550 };
+    assert.deepEqual(parseTmdbInput("https://www.themoviedb.org/movie/550/"), movie);
+    assert.deepEqual(parseTmdbInput("https://www.themoviedb.org/es/movie/550"), movie);
+    assert.deepEqual(
+      parseTmdbInput("https://www.themoviedb.org/tv/1396/season/1"),
+      { source: "url", type: "tv", id: 1396 }
     );
   });
 
@@ -247,7 +248,7 @@ describe("sanitizeNewLanguage", () => {
 });
 
 describe("validatePoster", () => {
-  test("accepts undefined and non-empty strings", () => {
+  test("accepts undefined and https URLs", () => {
     assert.doesNotThrow(() => validatePoster(undefined));
     assert.doesNotThrow(() => validatePoster("https://image.tmdb.org/t/p/w342/a.jpg"));
   });
@@ -258,9 +259,18 @@ describe("validatePoster", () => {
     assert.throws(() => validatePoster(42), ValidationError);
   });
 
-  test("known limitation: any non-empty string passes, no scheme or host check", () => {
-    assert.doesNotThrow(() => validatePoster("not-a-url"));
-    assert.doesNotThrow(() => validatePoster("javascript:alert(1)"));
+  test("rejects anything that is not an https URL with a host", () => {
+    for (const value of [
+      "not-a-url",
+      "javascript:alert(1)",
+      "http://image.tmdb.org/t/p/w342/a.jpg",
+      "https://",
+      "https:///a.jpg",
+      "https://user@evil.example/a.jpg",
+      "https://image.tmdb.org/a b.jpg",
+    ]) {
+      assert.throws(() => validatePoster(value), ValidationError, value);
+    }
   });
 });
 
@@ -281,6 +291,8 @@ describe("validateSeasonPosters", () => {
     assert.throws(() => validateSeasonPosters("x", "series"), ValidationError);
     assert.throws(() => validateSeasonPosters({ first: "https://a" }, "series"), ValidationError);
     assert.throws(() => validateSeasonPosters({ 1: "" }, "series"), ValidationError);
+    assert.throws(() => validateSeasonPosters({ 1: "http://a/b.jpg" }, "series"), ValidationError);
+    assert.throws(() => validateSeasonPosters({ 1: "javascript:alert(1)" }, "series"), ValidationError);
   });
 });
 

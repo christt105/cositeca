@@ -94,14 +94,15 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
   group id must exist in `groups.yaml`. Invite links (`t.me/+...`,
   `joinchat`, or anything not starting with `https://t.me/c/`) are rejected.
 - The same `link` cannot appear twice in the whole repository.
-- `poster`, if present, must be a non-empty string and is used as-is instead
+- `poster`, if present, must be an `https://` URL and is used as-is instead
   of the TMDB poster. The add issue form has an optional Portada field for
   it; the bot writes it at the top of the file (and replaces an existing
   one).
 - `seasonPosters`, series only, optional: a map from a `season` value (same
   number or `"all"` used in `links`) to a poster URL. Checked before the
   TMDB season poster, and used as the fallback when TMDB has no poster for
-  that season or the season doesn't exist there at all.
+  that season or the season doesn't exist there at all. Values must be
+  `https://` URLs too.
 
 ## Tests
 
@@ -128,7 +129,9 @@ A minimal client in `scripts/lib.js` uses native `fetch`. If the API key
 starts with `eyJ` it is sent as a `Bearer` token, otherwise as `?api_key=`.
 Every request uses `language=es-ES`. Titles can be identified by a
 `themoviedb.org` URL, a `tmdb:<id>` reference, or an IMDB id (resolved via
-`/3/find`).
+`/3/find`). URLs may carry a language prefix (`/es/movie/550`), a slug, a
+trailing slash, a query string or a `/season/<n>` suffix; the season in the
+URL is ignored, it still has to go in the Temporada field.
 
 `validate` and `build` share a JSON response cache (`.cache/tmdb.json` by
 default, override with `TMDB_CACHE_PATH`) so re-running them only fetches

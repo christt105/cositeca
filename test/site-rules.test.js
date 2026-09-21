@@ -55,12 +55,26 @@ describe("shared regexes", () => {
     );
   });
 
-  test("known limitation: TMDB_URL_RE rejects trailing slashes, language prefixes and season URLs", () => {
+  test("TMDB_URL_RE accepts trailing slashes, language prefixes, queries and season URLs", () => {
+    for (const [value, expected] of [
+      ["https://www.themoviedb.org/movie/550/", ["movie", "550"]],
+      ["https://www.themoviedb.org/es/movie/550", ["movie", "550"]],
+      ["https://www.themoviedb.org/es-ES/movie/550-el-club-de-la-lucha/", ["movie", "550"]],
+      ["https://www.themoviedb.org/movie/550-fight-club?language=es-ES", ["movie", "550"]],
+      ["https://www.themoviedb.org/tv/1396/season/1", ["tv", "1396"]],
+      ["https://www.themoviedb.org/tv/1396-breaking-bad/season/2/", ["tv", "1396"]],
+    ]) {
+      assert.deepEqual(TMDB_URL_RE.exec(value)?.slice(1), expected, value);
+    }
+  });
+
+  test("TMDB_URL_RE rejects other TMDB pages and hosts", () => {
     for (const value of [
-      "https://www.themoviedb.org/movie/550/",
-      "https://www.themoviedb.org/es/movie/550",
-      "https://www.themoviedb.org/tv/1396/season/1",
       "https://www.themoviedb.org/person/287",
+      "https://www.themoviedb.org/movie/550/cast",
+      "https://www.themoviedb.org/tv/1396/season/one",
+      "https://www.themoviedb.org/spanish/movie/550",
+      "https://evil.example/themoviedb.org/movie/550",
     ]) {
       assert.equal(TMDB_URL_RE.test(value), false, value);
     }
@@ -72,15 +86,17 @@ describe("shared regexes", () => {
     assert.equal(TMDB_ID_RE.test("550"), false);
   });
 
-  test("IMDB_ID_RE accepts tt ids of any length", () => {
+  test("IMDB_ID_RE accepts tt ids of up to 12 digits", () => {
     assert.equal(IMDB_ID_RE.test("tt0137523"), true);
     assert.equal(IMDB_ID_RE.test("tt1"), true);
     assert.equal(IMDB_ID_RE.test("nm0000138"), false);
     assert.equal(IMDB_ID_RE.test("tt"), false);
   });
 
-  test("known limitation: IMDB_ID_RE does not cap the number of digits", () => {
-    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(40)}`), true);
+  test("IMDB_ID_RE rejects more than 12 digits", () => {
+    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(12)}`), true);
+    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(13)}`), false);
+    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(40)}`), false);
   });
 });
 
@@ -139,8 +155,8 @@ describe("ui helpers", () => {
     assert.equal(esc(0), "0");
   });
 
-  test("known limitation: esc does not escape single quotes", () => {
-    assert.equal(esc("it's"), "it's");
+  test("esc escapes single quotes for single-quoted attributes", () => {
+    assert.equal(esc("it's"), "it&#39;s");
   });
 
   test("typeIcon labels the icon and escapes the extra text", () => {
