@@ -185,12 +185,12 @@ describe("resultFiles", () => {
 });
 
 describe("reportFailure", () => {
-  function runners({ failOn } = {}) {
+  function runners({ failOn, prCount = "0" } = {}) {
     const calls = [];
     const make = (tool) => (args) => {
       calls.push([tool, ...args]);
       if (failOn && failOn(tool, args)) throw new Error(`${tool} failed`);
-      return "";
+      return tool === "gh" && args[0] === "pr" ? `${prCount}\n` : "";
     };
     return { calls, gh: make("gh"), git: make("git") };
   }
@@ -239,6 +239,14 @@ describe("reportFailure", () => {
     assert.equal(calls.some(([tool]) => tool === "git"), false);
   });
 
+  test("keeps a pushed branch when GitHub already has a PR for it", () => {
+    const { calls, gh, git } = runners({ prCount: "1" });
+    assert.throws(() =>
+      reportFailure(new Error("pr create timed out"), { ...base, pushed: true, prCreated: false, gh, git })
+    );
+    assert.equal(calls.some(([tool]) => tool === "git"), false);
+  });
+
   test("keeps going when a reporting step fails and still rethrows the original error", () => {
     const { calls, gh, git } = runners({ failOn: (tool) => tool === "gh" });
     const err = new Error("boom");
@@ -253,6 +261,6 @@ describe("reportFailure", () => {
       console.error = originalConsoleError;
     }
     assert.equal(calls.length, 3);
-    assert.deepEqual(calls[2], ["git", "push", "origin", "--delete", "bot/entry-7"]);
+    assert.equal(calls.some(([tool]) => tool === "git"), false);
   });
 });
