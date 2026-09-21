@@ -32,6 +32,10 @@ synopses). Deployed on GitHub Pages.
   `.github/workflows/add-entry.yml`, which commits directly to `main`. The
   title page and the add page open those forms with every field prefilled
   by query string, so users only review and submit.
+- `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
+  `new_link` is empty and no other field is filled. An empty `new_link`
+  next to any other field keeps the current link. The same rule applies to
+  `fix` operations in batch mode.
 - `reidentify.yml` moves one link (`old_link`) or, if empty, every link of
   the entry at `tmdb` to another title (`new_tmdb`), creating the target
   file or appending to an existing one and deleting the source if it ends

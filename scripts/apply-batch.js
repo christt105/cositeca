@@ -98,7 +98,7 @@ function updateExistingLinks(op, result, existingLinks) {
     existingLinks.add(op.link);
   } else if (op.type === "fix") {
     existingLinks.delete(op.old_link);
-    if (!result.deleted) existingLinks.add(op.new_link);
+    if (!result.deleted) existingLinks.add(op.new_link || op.old_link);
   }
 }
 

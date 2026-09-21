@@ -23,7 +23,7 @@ body:
     id: new_link
     attributes:
       label: Link nuevo
-      description: Déjalo vacío para borrar el link
+      description: "Escribe \"-\" para borrar el link. Vacío deja el link como está si cambias otro campo"
       placeholder: https://t.me/c/2229558644/12345
     validations:
       required: false

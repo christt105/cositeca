@@ -121,7 +121,7 @@ export async function bindTitleEditing(view, item) {
     row.querySelector("[data-delete]").addEventListener("click", () => {
       const what = item.type === "series" ? `${link.seasonName} ${link.quality}` : link.quality;
       if (!confirm(`¿Borrar el link ${what} de ${item.title}?`)) return;
-      const fields = { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link };
+      const fields = { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link, new_link: "-" };
       if (isBatchMode()) {
         queueOperation(view, "fix", fields, `${item.title} — borrar ${what}`);
       } else {

@@ -246,10 +246,41 @@ describe("processFix: deleting a link", () => {
     assert.equal(result.deleted, true);
   });
 
-  test("known bug B16: other fields do not stop the deletion", () => {
+  test("an empty new link next to other fields keeps the link and applies them", () => {
     const { ctx } = deps();
     const result = processFix({ old_link: link(1), new_link: "", quality: "4K", audio: "Latino" }, ctx);
+    assert.equal(result.deleted, false);
+    assert.equal(result.quality, "4K");
+    assert.deepEqual(load(result.content).links, [
+      { quality: "4K", audio: ["Latino"], link: link(1) },
+      { quality: "4K", link: link(2) },
+    ]);
+  });
+
+  test("a missing new link next to other fields keeps the link", () => {
+    const { ctx } = deps();
+    const result = processFix({ old_link: link(1), tags: "HDR" }, ctx);
+    assert.equal(result.deleted, false);
+    assert.equal(load(result.content).links[0].link, link(1));
+  });
+
+  test("\"-\" as the new link deletes it even with other fields", () => {
+    const { ctx } = deps();
+    const result = processFix({ old_link: link(1), new_link: "-", quality: "4K" }, ctx);
     assert.equal(result.deleted, true);
+    assert.equal(result.quality, "1080p");
     assert.deepEqual(load(result.content).links.map((l) => l.link), [link(2)]);
+  });
+
+  test("the issue form fields left empty still delete the link", () => {
+    const { ctx } = deps();
+    const result = processFix(
+      {
+        tmdb: "https://www.themoviedb.org/movie/550", old_link: link(1), new_link: "", quality: "",
+        audio: "", subs: "", new_audio_language: "", new_subs_language: "", season: "", tags: "",
+      },
+      ctx
+    );
+    assert.equal(result.deleted, true);
   });
 });

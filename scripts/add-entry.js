@@ -169,6 +169,22 @@ export function findFileByLink(link, { readdir, readFile }) {
   return null;
 }
 
+export const DELETE_LINK = "-";
+const FIX_TARGET_KEYS = new Set(["type", "tmdb", "old_link", "new_link"]);
+
+/**
+ * A fix deletes its link when new_link is "-", or when new_link is empty and
+ * no other field carries a value. An empty new_link next to any other value
+ * keeps the current link.
+ */
+export function wantsLinkDeletion(fields) {
+  if (fields.new_link === DELETE_LINK) return true;
+  if (fields.new_link) return false;
+  return Object.entries(fields).every(
+    ([key, value]) => FIX_TARGET_KEYS.has(key) || value === undefined || value === null || value === ""
+  );
+}
+
 export function processFix(fields, { qualities, groups, languages, existingLinks, readdir, readFile }) {
   requireTextFields(fields);
   const located = findFileByLink(fields.old_link, { readdir, readFile });
@@ -179,14 +195,16 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
   const oldEntry = data.links[idx];
   const title = data.title;
   let languagesChanged = false;
+  const deleted = wantsLinkDeletion(fields);
+  const newLink = fields.new_link || fields.old_link;
 
-  if (!fields.new_link) {
+  if (deleted) {
     data.links.splice(idx, 1);
   } else {
-    if (fields.new_link !== fields.old_link && existingLinks.has(fields.new_link)) {
-      throw new ValidationError(`link already exists in the catalog: ${fields.new_link}`);
+    if (newLink !== fields.old_link && existingLinks.has(newLink)) {
+      throw new ValidationError(`link already exists in the catalog: ${newLink}`);
     }
-    const updated = { ...oldEntry, link: fields.new_link };
+    const updated = { ...oldEntry, link: newLink };
     if (fields.quality) {
       validateQuality(fields.quality, qualities);
       updated.quality = fields.quality;
@@ -214,8 +232,7 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
     data.links[idx] = orderEntry(updated);
   }
 
-  const quality = fields.new_link ? data.links[idx].quality : oldEntry.quality;
-  const deleted = !fields.new_link;
+  const quality = deleted ? oldEntry.quality : data.links[idx].quality;
 
   if (data.links.length === 0) {
     return { filePath, content: null, title, quality, action: "delete", deleted, languagesChanged };

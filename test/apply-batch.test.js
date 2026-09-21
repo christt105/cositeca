@@ -200,6 +200,31 @@ describe("applyBatch", () => {
     assert.deepEqual(data.links, [{ quality: "1080p", tags: ["Extendida"], link: link(1) }]);
   });
 
+  test("a fix without new_link but with other fields keeps the link", async () => {
+    const result = await applyBatch(
+      [
+        { type: "fix", tmdb: MOVIE_URL, old_link: link(1), newlink: link(20) },
+        { type: "fix", tmdb: MOVIE_URL, old_link: link(1), quality: "4K" },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", link: link(1) },
+      ],
+      ctx()
+    );
+    assert.equal(result.applied.length, 2);
+    assert.deepEqual(result.skipped, [
+      `operación 3: link already exists in the catalog: ${link(1)}`,
+    ]);
+    fs.flush();
+    const data = load(readFileSync(join(root, "movies/550.yaml"), "utf8"));
+    assert.deepEqual(data.links, [{ quality: "4K", link: link(1) }]);
+  });
+
+  test("a fix with \"-\" as new_link deletes the link", async () => {
+    const result = await applyBatch([{ type: "fix", tmdb: TV_URL, old_link: link(2), new_link: "-" }], ctx());
+    assert.equal(result.applied.length, 1);
+    fs.flush();
+    assert.equal(existsSync(join(root, "series/1396.yaml")), false);
+  });
+
   test("an operation on a file deleted earlier in the batch is skipped", async () => {
     const result = await applyBatch(
       [
