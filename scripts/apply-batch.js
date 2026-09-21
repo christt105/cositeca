@@ -24,7 +24,7 @@ const REQUIRED_FIELDS = {
 };
 
 export function extractOperationsJson(issueBody) {
-  const body = (issueBody || "").replace(/\r\n/g, "\n");
+  const body = (issueBody || "").replace(/\r\n?/g, "\n");
   const heading = new RegExp(`^###\\s*${OPERATIONS_LABEL.replace(/[()]/g, "\\$&")}\\s*\\n+`, "m");
   const match = heading.exec(body);
   if (!match) return "";

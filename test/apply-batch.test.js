@@ -41,6 +41,11 @@ describe("extractOperationsJson", () => {
     assert.equal(extractOperationsJson(body), '[{"type":"add"}]');
   });
 
+  test("normalises stray carriage returns", () => {
+    const body = `${heading}\r\r[{"type":"add"}]`;
+    assert.equal(extractOperationsJson(body), '[{"type":"add"}]');
+  });
+
   test("returns an empty string when the heading is missing, empty or _No response_", () => {
     assert.equal(extractOperationsJson("### Calidad\n\n1080p"), "");
     assert.equal(extractOperationsJson(""), "");
