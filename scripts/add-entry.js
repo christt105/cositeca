@@ -352,12 +352,16 @@ export function describeResult(issueLabel, result) {
 }
 
 export function checkAntiSpam(createdAt, openEntryIssueCount) {
-  const accountAgeDays = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+  const createdMs = createdAt ? new Date(createdAt).getTime() : NaN;
+  if (Number.isNaN(createdMs)) {
+    return "No se ha podido comprobar la antigüedad de tu cuenta, alguien revisará la petición a mano.";
+  }
+  const accountAgeDays = (Date.now() - createdMs) / 86400000;
   if (accountAgeDays < 7) {
-    return "Cuenta demasiado nueva o demasiadas peticiones abiertas";
+    return "Tu cuenta de GitHub es demasiado nueva (menos de 7 días) para enviar peticiones.";
   }
   if (openEntryIssueCount > 3) {
-    return "Cuenta demasiado nueva o demasiadas peticiones abiertas";
+    return "Tienes demasiadas peticiones abiertas (más de 3), espera a que se procesen antes de enviar otra.";
   }
   return null;
 }

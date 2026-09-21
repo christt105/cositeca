@@ -112,14 +112,19 @@ describe("checkAntiSpam", () => {
     assert.equal(typeof checkAntiSpam(daysAgo(400), 4), "string");
   });
 
-  test("known bug B22: a missing created_at lets everything through", () => {
-    assert.equal(checkAntiSpam(undefined, 0), null);
-    assert.equal(checkAntiSpam(null, 0), null);
-    assert.equal(checkAntiSpam("", 0), null);
+  test("blocks a missing or unparseable created_at", () => {
+    for (const createdAt of [undefined, null, "", "not a date"]) {
+      assert.equal(typeof checkAntiSpam(createdAt, 0), "string", String(createdAt));
+    }
   });
 
-  test("known bug B22: both reasons share the same message", () => {
-    assert.equal(checkAntiSpam(daysAgo(1), 0), checkAntiSpam(daysAgo(400), 4));
+  test("gives each rejection reason its own message", () => {
+    const tooNew = checkAntiSpam(daysAgo(1), 0);
+    const tooMany = checkAntiSpam(daysAgo(400), 4);
+    const unknown = checkAntiSpam(undefined, 0);
+    assert.equal(new Set([tooNew, tooMany, unknown]).size, 3);
+    assert.match(tooNew, /nueva/);
+    assert.match(tooMany, /abiertas/);
   });
 });
 
