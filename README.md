@@ -169,11 +169,15 @@ always with `language=es-ES`, and rejects anything else with 404:
   the seasons list)
 - `GET /find/<imdbId>` (resolve an IMDB id)
 
-CORS is limited to `https://christt105.github.io`, `localhost`,
-`127.0.0.1` and `192.168.x.x` (local previews). Responses are cached at
-the edge (1 h for searches, 1 day for images and series) and a
-`[[ratelimits]]` binding caps each IP at 60 requests per minute so the
-Worker cannot be used as a public TMDB mirror.
+Only `https://christt105.github.io`, `http://localhost`,
+`http://127.0.0.1` and `http://192.168.x.x` (local previews, any port) are
+served: the `Origin` header (or, when it is absent, the origin of
+`Referer`) must match one of them exactly, otherwise the Worker answers
+403, so requests without either header (curl, scripts) are rejected.
+Responses are cached at the edge (1 h for searches, 1 day for images and
+series) and a `[[ratelimits]]` binding caps each IP at 60 requests per
+minute so the Worker cannot be used as a public TMDB mirror. If that
+binding is missing the Worker answers 503 instead of serving unlimited.
 
 Local development (no account needed): put `TMDB_API_KEY=...` in
 `tools/tmdb-proxy/.dev.vars` (gitignored) and run
