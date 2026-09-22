@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { load, dump } from "js-yaml";
 import { ValidationError, createTmdbClient } from "./lib.js";
 import {
   processAdd,
@@ -14,6 +13,7 @@ import {
   reportFailure,
 } from "./add-entry.js";
 import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
+import { loadConfig, saveLanguages } from "./config.js";
 
 export const MAX_OPERATIONS = 50;
 const OPERATIONS_LABEL = "Operaciones (JSON)";
@@ -197,9 +197,7 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
   }
   const ops = parseOperations(json);
 
-  const qualities = load(readFileSync("qualities.yaml", "utf8"));
-  const groups = load(readFileSync("groups.yaml", "utf8"));
-  const languages = load(readFileSync("languages.yaml", "utf8"));
+  const { qualities, groups, languages } = loadConfig(process.cwd());
   const fs = makeOverlayFs();
 
   const result = await applyBatch(ops, { qualities, groups, languages, tmdbClient, fs });
@@ -217,7 +215,7 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
 
   fs.flush();
   if (result.languagesChanged) {
-    writeFileSync("languages.yaml", dump(languages));
+    saveLanguages(process.cwd(), languages);
   }
 
   const subject = `feat: batch changes (#${issueNumber})`;

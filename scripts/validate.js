@@ -8,10 +8,9 @@ import {
   createLinkIndex,
 } from "./lib.js";
 import { findIndistinguishableVersions } from "../site/rules.js";
+import { loadConfig } from "./config.js";
 
-const groups = load(readFileSync("groups.yaml", "utf8"));
-const qualities = load(readFileSync("qualities.yaml", "utf8"));
-const languages = load(readFileSync("languages.yaml", "utf8"));
+const { groups, qualities, languages } = loadConfig(process.cwd());
 
 const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
 const tmdbCache = loadTmdbCache(cachePath);

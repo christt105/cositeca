@@ -9,10 +9,9 @@ import {
   purgeTmdbCache,
   parseAddedTimestamps,
 } from "./lib.js";
+import { loadConfig } from "./config.js";
 
-const groups = load(readFileSync("groups.yaml", "utf8"));
-const qualities = load(readFileSync("qualities.yaml", "utf8"));
-const languages = load(readFileSync("languages.yaml", "utf8"));
+const { groups, qualities, languages } = loadConfig(process.cwd());
 
 const apiKey = process.env.TMDB_API_KEY;
 if (!apiKey) {

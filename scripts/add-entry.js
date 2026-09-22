@@ -14,6 +14,7 @@ import {
 } from "./lib.js";
 import { linkKey } from "../site/rules.js";
 import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
+import { loadConfig, saveLanguages } from "./config.js";
 
 export const FIELD_LABELS = {
   tmdb: "URL de TMDB o id de IMDB",
@@ -474,9 +475,7 @@ async function main() {
 }
 
 async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
-  const qualities = load(readFileSync("qualities.yaml", "utf8"));
-  const groups = load(readFileSync("groups.yaml", "utf8"));
-  const languages = load(readFileSync("languages.yaml", "utf8"));
+  const { qualities, groups, languages } = loadConfig(process.cwd());
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 
   const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));
@@ -539,7 +538,7 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
     else writeFileSync(filePath, content);
   }
   if (result.languagesChanged) {
-    writeFileSync("languages.yaml", dump(languages));
+    saveLanguages(process.cwd(), languages);
   }
 
   const { subject, close } = describeResult(issueLabel, result);
