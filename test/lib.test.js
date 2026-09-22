@@ -17,7 +17,12 @@ import {
   TMDB_CACHE_TTL_MS,
   resolveTmdbTarget,
   parseAddedTimestamps,
+  isEntrypoint,
 } from "../scripts/lib.js";
+import { mkdtempSync, writeFileSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { config, fakeTmdb, GROUP_ID, link } from "./fixtures.js";
 
 describe("parseTelegramLink", () => {
@@ -572,5 +577,20 @@ describe("parseAddedTimestamps", () => {
   test("ignores paths before the first commit header and empty output", () => {
     assert.deepEqual(parseAddedTimestamps("movies/1.yaml\n\x00100\n\nmovies/2.yaml\n"), new Map([["movies/2.yaml", 100]]));
     assert.deepEqual(parseAddedTimestamps(""), new Map());
+  });
+});
+
+describe("isEntrypoint", () => {
+  test("matches the started script through a symlink and rejects other modules", () => {
+    const dir = mkdtempSync(join(tmpdir(), "entry-"));
+    const real = join(dir, "script.js");
+    const link = join(dir, "link.js");
+    writeFileSync(real, "");
+    symlinkSync(real, link);
+    const url = pathToFileURL(real).href;
+    assert.equal(isEntrypoint(url, real), true);
+    assert.equal(isEntrypoint(url, link), true);
+    assert.equal(isEntrypoint(url, join(dir, "other.js")), false);
+    assert.equal(isEntrypoint(url, undefined), false);
   });
 });

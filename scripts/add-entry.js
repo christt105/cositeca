@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { createTmdbClient } from "./lib.js";
+import { createTmdbClient, isEntrypoint } from "./lib.js";
 import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 import { parseIssueBody } from "./issue-fields.js";
@@ -146,6 +145,6 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
   closeIssueIfOpen(gh, issueNumber);
 }
 
-if (process.env.ISSUE_NUMBER && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.env.ISSUE_NUMBER && isEntrypoint(import.meta.url)) {
   await main();
 }

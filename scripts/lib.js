@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   TELEGRAM_LINK_RE,
   TMDB_URL_RE,
@@ -326,4 +327,14 @@ export async function resolveTmdbTarget(descriptor, tmdbClient) {
     throw new ValidationError(`IMDB id not found on TMDB: ${descriptor.imdbId}`);
   }
   return { type: descriptor.type, id: descriptor.id };
+}
+
+/** True when the module at `moduleUrl` is the script node was started with, following symlinks. */
+export function isEntrypoint(moduleUrl, argv1 = process.argv[1]) {
+  if (!argv1) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
 }

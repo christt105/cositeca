@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
 import { load } from "js-yaml";
 import {
   parseTelegramLink,
@@ -9,6 +8,7 @@ import {
   saveTmdbCache,
   purgeTmdbCache,
   parseAddedTimestamps,
+  isEntrypoint,
 } from "./lib.js";
 import { loadConfig } from "./config.js";
 
@@ -214,6 +214,6 @@ async function main() {
   );
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isEntrypoint(import.meta.url)) {
   await main();
 }
