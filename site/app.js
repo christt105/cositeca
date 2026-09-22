@@ -373,7 +373,9 @@ tagFilter.addEventListener("change", () => navigateGrid(true));
 
 searchInput.addEventListener(
   "input",
-  debounce(() => navigateGrid(false), SEARCH_DEBOUNCE_MS)
+  debounce(() => {
+    if (parseRoute().view === "grid") navigateGrid(false);
+  }, SEARCH_DEBOUNCE_MS)
 );
 
 window.addEventListener("hashchange", () => {
