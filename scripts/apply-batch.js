@@ -9,9 +9,8 @@ import {
   resultFiles,
   describeResult,
   collectExistingLinks,
-  checkAntiSpam,
-  reportFailure,
-} from "./add-entry.js";
+} from "./operations.js";
+import { checkAntiSpam, reportFailure } from "./add-entry.js";
 import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 
