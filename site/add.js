@@ -403,7 +403,7 @@ function buildAddFields() {
 
 function addLabel(fields) {
   const season = fields.season ? ` T${fields.season}` : "";
-  return `${selected.title} — añadir ${fields.quality}${season}`;
+  return `${selected.title} · añadir ${fields.quality}${season}`;
 }
 
 function updateOutcome() {

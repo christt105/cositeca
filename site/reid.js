@@ -162,7 +162,7 @@ export function openReidentify(slot, item, link, submit) {
         poster: posterChoice ?? "",
       };
       const what = whole ? "entrada" : link.season !== undefined ? `${link.seasonName} ${link.quality}` : link.quality;
-      submit(fields, `${item.title} — mover ${what} a ${nameOf(info)}`);
+      submit(fields, `${item.title} · mover ${what} a ${nameOf(info)}`);
       panel.remove();
     });
   }

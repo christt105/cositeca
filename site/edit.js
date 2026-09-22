@@ -79,7 +79,7 @@ function renderEditForm(row, item, link, meta) {
     };
     const view = row.closest(".title");
     if (isBatchMode()) {
-      queueOperation(view, "fix", fields, `${item.title} — editar ${fields.quality}`);
+      queueOperation(view, "fix", fields, `${item.title} · editar ${fields.quality}`);
     } else {
       openIssue(view, issueUrl("fix.yml", fields));
     }
@@ -119,7 +119,7 @@ export async function bindTitleEditing(view, item) {
       if (!confirm(`¿Borrar el link ${what} de ${item.title}?`)) return;
       const fields = { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link, new_link: "-" };
       if (isBatchMode()) {
-        queueOperation(view, "fix", fields, `${item.title} — borrar ${what}`);
+        queueOperation(view, "fix", fields, `${item.title} · borrar ${what}`);
       } else {
         openIssue(view, issueUrl("fix.yml", fields));
       }
@@ -156,7 +156,7 @@ export async function bindTitleEditing(view, item) {
     actions.querySelector("button").addEventListener("click", () => {
       const fields = { tmdb: tmdbUrl(item.type, item.tmdb), poster: choice ?? "" };
       if (isBatchMode()) {
-        queueOperation(view, "poster", fields, `${item.title} — portada`);
+        queueOperation(view, "poster", fields, `${item.title} · portada`);
       } else {
         openIssue(view, issueUrl("poster.yml", fields));
       }
