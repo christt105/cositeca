@@ -51,9 +51,10 @@ export function parseOperations(text) {
 
 function validOperation(op) {
   if (typeof op !== "object" || op === null) return "operación inválida, se omite";
-  const required = REQUIRED_FIELDS[op.type];
-  if (!required) return `tipo de operación desconocido, se omite: ${JSON.stringify(op.type)}`;
-  for (const field of required) {
+  if (!Object.prototype.hasOwnProperty.call(REQUIRED_FIELDS, op.type)) {
+    return `tipo de operación desconocido, se omite: ${JSON.stringify(op.type)}`;
+  }
+  for (const field of REQUIRED_FIELDS[op.type]) {
     if (!op[field]) return `falta el campo "${field}" en una operación de tipo ${op.type}, se omite`;
   }
   return null;

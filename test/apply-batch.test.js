@@ -311,6 +311,22 @@ describe("applyBatch", () => {
     ]);
   });
 
+  test("skips an operation whose type is an Object.prototype key", async () => {
+    const result = await applyBatch(
+      [
+        { type: "toString", tmdb: MOVIE_URL },
+        { type: "constructor", tmdb: MOVIE_URL },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", link: link(24) },
+      ],
+      ctx()
+    );
+    assert.equal(result.applied.length, 1);
+    assert.deepEqual(result.skipped, [
+      'operación 1: tipo de operación desconocido, se omite: "toString"',
+      'operación 2: tipo de operación desconocido, se omite: "constructor"',
+    ]);
+  });
+
   test("rolls back a new language when the operation is rejected afterwards", async () => {
     const result = await applyBatch(
       [
