@@ -10,8 +10,7 @@ import {
   describeResult,
   collectExistingLinks,
 } from "./operations.js";
-import { checkAntiSpam, reportFailure } from "./add-entry.js";
-import { openBotPr, closeIssueIfOpen } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 
 export const MAX_OPERATIONS = 50;

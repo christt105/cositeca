@@ -1,3 +1,5 @@
+import { ValidationError } from "./lib.js";
+
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function findRunId(gh, workflow, branch, { wait = sleep } = {}) {
@@ -57,4 +59,56 @@ export function closeIssueIfOpen(gh, issueNumber) {
   if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
     gh(["issue", "close", issueNumber]);
   }
+}
+
+export function checkAntiSpam(createdAt, openEntryIssueCount) {
+  const createdMs = createdAt ? new Date(createdAt).getTime() : NaN;
+  if (Number.isNaN(createdMs)) {
+    return "No se ha podido comprobar la antigüedad de tu cuenta. Vuelve a intentarlo más tarde.";
+  }
+  const accountAgeDays = (Date.now() - createdMs) / 86400000;
+  if (accountAgeDays < 7) {
+    return "Tu cuenta de GitHub es demasiado nueva (menos de 7 días) para enviar peticiones.";
+  }
+  if (openEntryIssueCount > 3) {
+    return "Tienes demasiadas peticiones abiertas (más de 3), espera a que se procesen antes de enviar otra.";
+  }
+  return null;
+}
+
+export const INTERNAL_ERROR_LABEL = "bug";
+export const INTERNAL_ERROR_MESSAGE =
+  "Error interno al procesar la petición. No es culpa tuya: alguien lo revisará a mano.";
+
+/**
+ * Reports a failed run on its issue. A ValidationError is explained to the
+ * author and labelled invalid. Any other error gets a generic internal-error
+ * comment and label, deletes the bot branch if it was pushed and GitHub has
+ * no PR for it,
+ * and is rethrown so the job still fails. Each cleanup step is best effort.
+ */
+export function reportFailure(err, { issueNumber, branch, pushed, prCreated, gh, git }) {
+  if (err instanceof ValidationError) {
+    gh(["issue", "comment", issueNumber, "--body", err.message]);
+    gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
+    return;
+  }
+  const steps = [
+    () => gh(["issue", "comment", issueNumber, "--body", INTERNAL_ERROR_MESSAGE]),
+    () => gh(["issue", "edit", issueNumber, "--add-label", INTERNAL_ERROR_LABEL]),
+  ];
+  if (pushed && !prCreated) {
+    steps.push(() => {
+      const prs = gh(["pr", "list", "--head", branch, "--state", "all", "--json", "number", "--jq", "length"]);
+      if (String(prs).trim() === "0") git(["push", "origin", "--delete", branch]);
+    });
+  }
+  for (const step of steps) {
+    try {
+      step();
+    } catch (cleanupErr) {
+      console.error(`failure reporting step failed: ${cleanupErr.message}`);
+    }
+  }
+  throw err;
 }
