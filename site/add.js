@@ -9,15 +9,15 @@ import {
   newLanguageError,
   resolveProxyUrl,
 } from "./rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked } from "./ui.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked, debounce } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
 const view = document.getElementById("view-add");
 const IMG = "https://image.tmdb.org/t/p";
+const SEARCH_DEBOUNCE_MS = 300;
 
 let meta = null;
 let ctx = { catalog: [], byKey: new Map() };
-let searchTimer = null;
 let requestSeq = 0;
 let selected = null;
 let posterChoice = null;
@@ -84,10 +84,10 @@ export async function renderAdd(params, context) {
     <div id="add-outcome"></div>
   `;
   const input = $("add-search");
-  input.addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => handleQuery(input.value.trim()), 300);
-  });
+  input.addEventListener(
+    "input",
+    debounce(() => handleQuery(input.value.trim()), SEARCH_DEBOUNCE_MS)
+  );
   const tmdb = params.get("tmdb");
   const q = params.get("q");
   if (tmdb) {
