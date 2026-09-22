@@ -33,3 +33,12 @@ export function byIdIn(root) {
 export function checked(root, name) {
   return [...root.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
 }
+
+/** Wraps `fn` so a call only runs `ms` after the calls stop coming in. */
+export function debounce(fn, ms, timers = globalThis) {
+  let timer = null;
+  return (...args) => {
+    timers.clearTimeout(timer);
+    timer = timers.setTimeout(() => fn(...args), ms);
+  };
+}

@@ -1,5 +1,5 @@
 import { tmdbUrl, imdbUrl, issueUrl, matchesSearch, telegramMessageId } from "./rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, debounce } from "./ui.js";
 import { renderAdd } from "./add.js";
 import { bindTitleEditing } from "./edit.js";
 import { renderBatch } from "./batch.js";
@@ -24,6 +24,8 @@ const views = {
 };
 const batchModeCheckbox = document.getElementById("batch-mode-checkbox");
 const batchBadge = document.getElementById("batch-badge");
+
+const SEARCH_DEBOUNCE_MS = 150;
 
 let catalog = [];
 let byKey = new Map();
@@ -368,7 +370,10 @@ filterPanelToggle.addEventListener("click", () => {
 genreFilter.addEventListener("change", () => navigateGrid(true));
 tagFilter.addEventListener("change", () => navigateGrid(true));
 
-searchInput.addEventListener("input", () => navigateGrid(false));
+searchInput.addEventListener(
+  "input",
+  debounce(() => navigateGrid(false), SEARCH_DEBOUNCE_MS)
+);
 
 window.addEventListener("hashchange", () => {
   visitedWithinApp = true;

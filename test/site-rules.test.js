@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
   TELEGRAM_LINK_RE,
@@ -17,7 +17,7 @@ import {
   telegramMessageId,
   findIndistinguishableVersions,
 } from "../site/rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "../site/ui.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, debounce } from "../site/ui.js";
 import { GROUP_ID, link } from "./fixtures.js";
 
 describe("shared regexes", () => {
@@ -285,6 +285,70 @@ describe("newLanguageError", () => {
   test("explains the rule for commas, digits, punctuation and bad lengths", () => {
     for (const value of ["Italiano, Portugués", "Latino 2", "<script>", "a", "a".repeat(31)]) {
       assert.match(newLanguageError(value), /idioma nuevo/);
+    }
+  });
+});
+
+describe("debounce", () => {
+  test("does not run until ms have passed without another call", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let calls = 0;
+      const debounced = debounce(() => calls++, 150);
+      debounced();
+      mock.timers.tick(149);
+      assert.equal(calls, 0);
+      mock.timers.tick(1);
+      assert.equal(calls, 1);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("restarts the delay on every call", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let calls = 0;
+      const debounced = debounce(() => calls++, 150);
+      debounced();
+      mock.timers.tick(100);
+      debounced();
+      mock.timers.tick(100);
+      assert.equal(calls, 0);
+      mock.timers.tick(50);
+      assert.equal(calls, 1);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("calls fn with the arguments of the last call", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const seen = [];
+      const debounced = debounce((...args) => seen.push(args), 150);
+      debounced(1);
+      debounced(2);
+      mock.timers.tick(150);
+      assert.deepEqual(seen, [[2]]);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("independent call sites do not share a timer", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let calls = 0;
+      const fn = () => calls++;
+      const a = debounce(fn, 150);
+      const b = debounce(fn, 150);
+      a();
+      b();
+      mock.timers.tick(150);
+      assert.equal(calls, 2);
+    } finally {
+      mock.timers.reset();
     }
   });
 });
