@@ -397,7 +397,10 @@ onQueueChange(refreshBatchUi);
 refreshBatchUi();
 
 fetch("catalog.json", { cache: "no-cache" })
-  .then((res) => res.json())
+  .then((res) => {
+    if (!res.ok) throw new Error(`catalog.json: HTTP ${res.status}`);
+    return res.json();
+  })
   .then((data) => {
     catalog = data;
     byKey = new Map(catalog.map((item) => [`${item.type}/${item.tmdb}`, item]));
