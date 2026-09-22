@@ -7,6 +7,14 @@ export const NEW_LANGUAGE_RE = /^[\p{L}\p{M}\s]{2,30}$/u;
 export const REPO_URL = "https://github.com/christt105/cositeca";
 export const TMDB_PROXY_URL = "https://cositeca-tmdb-proxy.christt105.workers.dev";
 
+/**
+ * TMDB proxy URL to use: a local override when set (for development
+ * against e.g. `wrangler dev`), otherwise the deployed default.
+ */
+export function resolveProxyUrl(override, fallback) {
+  return override || fallback || "";
+}
+
 export function tmdbUrl(type, id) {
   const kind = type === "movie" ? "movie" : "tv";
   return `https://www.themoviedb.org/${kind}/${id}`;

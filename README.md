@@ -189,9 +189,10 @@ npx wrangler secret put TMDB_API_KEY
 
 The Worker is deployed at
 `https://cositeca-tmdb-proxy.christt105.workers.dev`, which is the
-`TMDB_PROXY_URL` constant in `site/rules.js`. If that constant were empty
-the page would use `localStorage.tmdbProxy` if set (development only) and
-otherwise fall back to the plain GitHub issue form.
+`TMDB_PROXY_URL` constant in `site/rules.js`. Setting
+`localStorage.tmdbProxy` in the browser (e.g. to `http://localhost:8787`
+while running `wrangler dev`) overrides that constant, which is handy for
+local development; leave it unset to use the deployed Worker.
 
 ## Catalog order
 

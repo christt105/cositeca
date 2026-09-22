@@ -16,6 +16,7 @@ import {
   newLanguageError,
   telegramMessageId,
   findIndistinguishableVersions,
+  resolveProxyUrl,
 } from "../site/rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS, debounce } from "../site/ui.js";
 import { GROUP_ID, link } from "./fixtures.js";
@@ -143,6 +144,22 @@ describe("URL helpers", () => {
 
   test("TMDB_PROXY_URL is an absolute https URL", () => {
     assert.match(TMDB_PROXY_URL, /^https:\/\//);
+  });
+});
+
+describe("resolveProxyUrl", () => {
+  test("a local override takes precedence over the fallback", () => {
+    assert.equal(resolveProxyUrl("http://localhost:8787", TMDB_PROXY_URL), "http://localhost:8787");
+  });
+
+  test("falls back to the deployed URL when there is no override", () => {
+    assert.equal(resolveProxyUrl(null, TMDB_PROXY_URL), TMDB_PROXY_URL);
+    assert.equal(resolveProxyUrl("", TMDB_PROXY_URL), TMDB_PROXY_URL);
+  });
+
+  test("is empty when neither an override nor a fallback is set", () => {
+    assert.equal(resolveProxyUrl(null, ""), "");
+    assert.equal(resolveProxyUrl("", undefined), "");
   });
 });
 

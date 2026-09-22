@@ -7,6 +7,7 @@ import {
   tmdbUrl,
   issueUrl,
   newLanguageError,
+  resolveProxyUrl,
 } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
@@ -22,7 +23,7 @@ let selected = null;
 let posterChoice = null;
 
 function proxyUrl() {
-  return TMDB_PROXY_URL || localStorage.getItem("tmdbProxy") || "";
+  return resolveProxyUrl(localStorage.getItem("tmdbProxy"), TMDB_PROXY_URL);
 }
 
 export async function proxyGet(path) {
