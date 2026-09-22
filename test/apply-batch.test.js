@@ -327,6 +327,21 @@ describe("applyBatch", () => {
     ]);
   });
 
+  test("skips an operation with a non-string season instead of reading it as 0", async () => {
+    const result = await applyBatch(
+      [
+        { type: "add", tmdb: TV_URL, quality: "4K", season: [], link: link(25) },
+        { type: "add", tmdb: TV_URL, quality: "4K", season: true, link: link(26) },
+      ],
+      ctx()
+    );
+    assert.deepEqual(result.applied, []);
+    assert.deepEqual(result.skipped, [
+      'operación 1: season must be "all" or an integer >= 0, got []',
+      'operación 2: season must be "all" or an integer >= 0, got true',
+    ]);
+  });
+
   test("rolls back a new language when the operation is rejected afterwards", async () => {
     const result = await applyBatch(
       [

@@ -49,11 +49,13 @@ export function requireTextFields(fields) {
 }
 
 export function parseSeasonField(raw) {
-  if (raw === "" || raw === undefined) return undefined;
+  if (raw === "" || raw === undefined || raw === null) return undefined;
   if (raw === "all") return "all";
-  const n = Number(raw);
+  const n = typeof raw === "string" || typeof raw === "number" ? Number(raw) : NaN;
   if (!Number.isInteger(n) || n < 0) {
-    throw new ValidationError(`season must be "all" or an integer >= 0, got ${raw}`);
+    throw new ValidationError(
+      `season must be "all" or an integer >= 0, got ${JSON.stringify(raw)}`
+    );
   }
   return n;
 }
