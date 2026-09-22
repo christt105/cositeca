@@ -24,6 +24,7 @@ const views = {
 };
 const batchModeCheckbox = document.getElementById("batch-mode-checkbox");
 const batchBadge = document.getElementById("batch-badge");
+const catalogError = document.getElementById("catalog-error");
 
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -407,6 +408,10 @@ fetch("catalog.json", { cache: "no-cache" })
       }
     });
     route();
+  })
+  .catch((err) => {
+    console.error("No se ha podido cargar catalog.json", err);
+    catalogError.classList.remove("hidden");
   });
 
 if ("serviceWorker" in navigator) {
