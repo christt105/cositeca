@@ -117,12 +117,14 @@ export default {
       return json({ error: "TMDB_API_KEY secret is not set" }, 500, cors);
     }
 
-    if (env.RATE_LIMITER) {
-      const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const { success } = await env.RATE_LIMITER.limit({ key: ip });
-      if (!success) {
-        return json({ error: "too many requests" }, 429, cors);
-      }
+    if (!env.RATE_LIMITER) {
+      console.error("RATE_LIMITER binding is missing; refusing to serve unlimited requests");
+      return json({ error: "rate limiter is not configured" }, 503, cors);
+    }
+    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const { success } = await env.RATE_LIMITER.limit({ key: ip });
+    if (!success) {
+      return json({ error: "too many requests" }, 429, cors);
     }
 
     const upstream = new URL(`${TMDB}${target.path}`);
