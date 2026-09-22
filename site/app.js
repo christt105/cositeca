@@ -410,8 +410,7 @@ fetch("catalog.json", { cache: "no-cache" })
       }
     });
     route();
-  })
-  .catch((err) => {
+  }, (err) => {
     console.error("No se ha podido cargar catalog.json", err);
     catalogError.classList.remove("hidden");
   });
