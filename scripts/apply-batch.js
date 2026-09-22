@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { ValidationError, createTmdbClient } from "./lib.js";
 import {
   processAdd,
@@ -259,6 +260,6 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
   closeIssueIfOpen(gh, issueNumber);
 }
 
-if (process.env.ISSUE_NUMBER) {
+if (process.env.ISSUE_NUMBER && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }
