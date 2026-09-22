@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { load } from "js-yaml";
 import {
   parseTelegramLink,
@@ -10,17 +11,6 @@ import {
   parseAddedTimestamps,
 } from "./lib.js";
 import { loadConfig } from "./config.js";
-
-const { groups, qualities, languages } = loadConfig(process.cwd());
-
-const apiKey = process.env.TMDB_API_KEY;
-if (!apiKey) {
-  console.error("TMDB_API_KEY is required to build");
-  process.exit(1);
-}
-const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
-const tmdbCache = loadTmdbCache(cachePath);
-const tmdb = createTmdbClient(apiKey, { cache: tmdbCache });
 
 const seasonNameOverrides = { all: "Serie completa" };
 
@@ -38,7 +28,7 @@ function baseDetail(info) {
   };
 }
 
-async function buildMovieEntry(id, data) {
+async function buildMovieEntry(id, data, { tmdb, groups, qualities }) {
   const info = await tmdb.getMovie(id);
   const links = data.links.map((entry) => {
     const { groupId } = parseTelegramLink(entry.link);
@@ -59,7 +49,7 @@ async function buildMovieEntry(id, data) {
     originalTitle: info.original_title,
     year: info.release_date ? info.release_date.slice(0, 4) : null,
     poster: data.poster ?? tmdb.posterUrl(info.poster_path),
-    qualities: dedupeQualities(links.map((l) => l.quality)),
+    qualities: dedupeQualities(links.map((l) => l.quality), qualities),
     genres: (info.genres ?? []).map((g) => g.name),
     links,
   };
@@ -67,7 +57,7 @@ async function buildMovieEntry(id, data) {
   return { entry, detail };
 }
 
-async function buildSeriesEntry(id, data) {
+async function buildSeriesEntry(id, data, { tmdb, groups, qualities }) {
   const info = await tmdb.getTv(id);
   const externalIds = await tmdb.getTvExternalIds(id);
   const seasonCache = new Map();
@@ -126,7 +116,7 @@ async function buildSeriesEntry(id, data) {
     originalTitle: info.original_name,
     year: info.first_air_date ? info.first_air_date.slice(0, 4) : null,
     poster: seriesPoster,
-    qualities: dedupeQualities(links.map((l) => l.quality)),
+    qualities: dedupeQualities(links.map((l) => l.quality), qualities),
     genres: (info.genres ?? []).map((g) => g.name),
     links,
   };
@@ -142,7 +132,7 @@ async function buildSeriesEntry(id, data) {
   return { entry, detail };
 }
 
-function dedupeQualities(list) {
+function dedupeQualities(list, qualities) {
   const set = new Set(list);
   return qualities.filter((q) => set.has(q));
 }
@@ -156,9 +146,11 @@ function getAddedTimestamps() {
   return parseAddedTimestamps(output);
 }
 
-async function main() {
-  const addedTimestamps = getAddedTimestamps();
-  const now = Math.floor(Date.now() / 1000);
+/**
+ * Builds the catalog entry and detail of every title file under movies/ and
+ * series/. A file that fails to parse or build is skipped with a warning.
+ */
+export async function loadTitleEntries({ tmdb, groups, qualities }, { addedTimestamps, now }) {
   const entries = [];
   for (const [type, builder] of [
     ["movies", buildMovieEntry],
@@ -175,13 +167,31 @@ async function main() {
       const path = `${type}/${filename}`;
       try {
         const data = load(readFileSync(path, "utf8"));
-        const { entry, detail } = await builder(id, data);
+        const { entry, detail } = await builder(id, data, { tmdb, groups, qualities });
         entries.push({ entry, detail, addedAt: addedTimestamps.get(path) ?? now });
       } catch (err) {
         console.warn(`skipping ${path}: ${err.message}`);
       }
     }
   }
+  return entries;
+}
+
+async function main() {
+  const { groups, qualities, languages } = loadConfig(process.cwd());
+
+  const apiKey = process.env.TMDB_API_KEY;
+  if (!apiKey) {
+    console.error("TMDB_API_KEY is required to build");
+    process.exit(1);
+  }
+  const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
+  const tmdbCache = loadTmdbCache(cachePath);
+  const tmdb = createTmdbClient(apiKey, { cache: tmdbCache });
+
+  const addedTimestamps = getAddedTimestamps();
+  const now = Math.floor(Date.now() / 1000);
+  const entries = await loadTitleEntries({ tmdb, groups, qualities }, { addedTimestamps, now });
   entries.sort((a, b) => {
     if (a.addedAt !== b.addedAt) return b.addedAt - a.addedAt;
     return a.entry.title.localeCompare(b.entry.title, "es");
@@ -204,4 +214,6 @@ async function main() {
   );
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}
