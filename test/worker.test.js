@@ -105,6 +105,12 @@ describe("origin checks", () => {
     assert.equal(upstreamCalls.length, 0);
   });
 
+  test("a Referer with userinfo is judged by its real host", async () => {
+    const res = await call("/movie/550", { headers: { Referer: `${PAGES}@evil.example/` } });
+    assert.equal(res.status, 403);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
   test("a disallowed Origin is not rescued by an allowed Referer", async () => {
     const res = await call("/movie/550", {
       headers: { Origin: "https://evil.example", Referer: `${PAGES}/cositeca/` },
@@ -202,6 +208,45 @@ describe("rate limiting", () => {
       env: makeEnv({ RATE_LIMITER: limiter }),
     });
     assert.deepEqual(limiter.calls, [{ key: "203.0.113.7" }]);
+  });
+});
+
+describe("cache", () => {
+  test("a cached response gets the CORS header of the current requester", async () => {
+    const cached = new Response(JSON.stringify({ id: 550 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": PAGES },
+    });
+    globalThis.caches = {
+      default: {
+        async match() {
+          return cached.clone();
+        },
+        async put() {},
+      },
+    };
+    const origin = "http://localhost:1313";
+    const res = await call("/movie/550", { headers: { Origin: origin } });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Access-Control-Allow-Origin"), origin);
+    assert.deepEqual(await res.json(), { id: 550 });
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test("a disallowed origin never reaches the cache", async () => {
+    let lookups = 0;
+    globalThis.caches = {
+      default: {
+        async match() {
+          lookups += 1;
+          return undefined;
+        },
+        async put() {},
+      },
+    };
+    const res = await call("/movie/550", { headers: { Origin: "https://evil.example" } });
+    assert.equal(res.status, 403);
+    assert.equal(lookups, 0);
   });
 });
 
