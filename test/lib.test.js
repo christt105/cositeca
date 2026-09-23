@@ -13,8 +13,16 @@ import {
   validateSeasonPosters,
   validateLinkEntry,
   createTmdbClient,
+  purgeTmdbCache,
+  TMDB_CACHE_TTL_MS,
   resolveTmdbTarget,
+  parseAddedTimestamps,
+  isEntrypoint,
 } from "../scripts/lib.js";
+import { mkdtempSync, writeFileSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { config, fakeTmdb, GROUP_ID, link } from "./fixtures.js";
 
 describe("parseTelegramLink", () => {
@@ -94,12 +102,13 @@ describe("parseTmdbInput", () => {
     });
   });
 
-  test("known limitation: TMDB URLs with a trailing slash, a language prefix or a season are rejected", () => {
-    assert.throws(() => parseTmdbInput("https://www.themoviedb.org/movie/550/"), ValidationError);
-    assert.throws(() => parseTmdbInput("https://www.themoviedb.org/es/movie/550"), ValidationError);
-    assert.throws(
-      () => parseTmdbInput("https://www.themoviedb.org/tv/1396/season/1"),
-      ValidationError
+  test("accepts TMDB URLs with a trailing slash, a language prefix or a season, ignoring the season", () => {
+    const movie = { source: "url", type: "movie", id: 550 };
+    assert.deepEqual(parseTmdbInput("https://www.themoviedb.org/movie/550/"), movie);
+    assert.deepEqual(parseTmdbInput("https://www.themoviedb.org/es/movie/550"), movie);
+    assert.deepEqual(
+      parseTmdbInput("https://www.themoviedb.org/tv/1396/season/1"),
+      { source: "url", type: "tv", id: 1396 }
     );
   });
 
@@ -211,18 +220,42 @@ describe("sanitizeNewLanguage", () => {
     assert.equal(sanitizeNewLanguage("a".repeat(30), existing), "a".repeat(30));
   });
 
-  test("known bug B8: free text with commas or digits is accepted as one language", () => {
-    assert.equal(sanitizeNewLanguage("Italiano, Portugués", existing), "Italiano, Portugués");
-    assert.equal(sanitizeNewLanguage("<script>", existing), "<script>");
+  test("rejects values shorter than 2 characters", () => {
+    assert.throws(() => sanitizeNewLanguage("a", existing), ValidationError);
+    assert.equal(sanitizeNewLanguage("ab", existing), "ab");
   });
 
-  test("known bug B8: accents make an equivalent value a new one", () => {
-    assert.equal(sanitizeNewLanguage("Ingles", existing), "Ingles");
+  test("rejects commas, digits and punctuation", () => {
+    assert.throws(() => sanitizeNewLanguage("Italiano, Portugués", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("Italiano 2", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("<script>", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("Italiano/Portugués", existing), ValidationError);
+    assert.throws(() => sanitizeNewLanguage("Italiano.", existing), ValidationError);
+  });
+
+  test("raises a Spanish message for an invalid value", () => {
+    assert.throws(
+      () => sanitizeNewLanguage("Italiano, Portugués", existing),
+      (err) => err instanceof ValidationError && /idioma nuevo/.test(err.message) && err.message.includes("Italiano, Portugués")
+    );
+  });
+
+  test("accepts letters with accents and marks", () => {
+    assert.equal(sanitizeNewLanguage("Portugués", existing), "Portugués");
+    assert.equal(sanitizeNewLanguage("Árabe", existing), "Árabe");
+    assert.equal(sanitizeNewLanguage("Portugue\u0301s", existing), "Portugu\u00e9s");
+  });
+
+  test("reuses an existing value regardless of accents and case", () => {
+    assert.equal(sanitizeNewLanguage("Ingles", existing), "Inglés");
+    assert.equal(sanitizeNewLanguage("ingles", existing), "Inglés");
+    assert.equal(sanitizeNewLanguage("INGLES", existing), "Inglés");
+    assert.equal(sanitizeNewLanguage("Cástellano", existing), "Castellano");
   });
 });
 
 describe("validatePoster", () => {
-  test("accepts undefined and non-empty strings", () => {
+  test("accepts undefined and https URLs", () => {
     assert.doesNotThrow(() => validatePoster(undefined));
     assert.doesNotThrow(() => validatePoster("https://image.tmdb.org/t/p/w342/a.jpg"));
   });
@@ -233,9 +266,18 @@ describe("validatePoster", () => {
     assert.throws(() => validatePoster(42), ValidationError);
   });
 
-  test("known limitation: any non-empty string passes, no scheme or host check", () => {
-    assert.doesNotThrow(() => validatePoster("not-a-url"));
-    assert.doesNotThrow(() => validatePoster("javascript:alert(1)"));
+  test("rejects anything that is not an https URL with a host", () => {
+    for (const value of [
+      "not-a-url",
+      "javascript:alert(1)",
+      "http://image.tmdb.org/t/p/w342/a.jpg",
+      "https://",
+      "https:///a.jpg",
+      "https://user@evil.example/a.jpg",
+      "https://image.tmdb.org/a b.jpg",
+    ]) {
+      assert.throws(() => validatePoster(value), ValidationError, value);
+    }
   });
 });
 
@@ -256,6 +298,8 @@ describe("validateSeasonPosters", () => {
     assert.throws(() => validateSeasonPosters("x", "series"), ValidationError);
     assert.throws(() => validateSeasonPosters({ first: "https://a" }, "series"), ValidationError);
     assert.throws(() => validateSeasonPosters({ 1: "" }, "series"), ValidationError);
+    assert.throws(() => validateSeasonPosters({ 1: "http://a/b.jpg" }, "series"), ValidationError);
+    assert.throws(() => validateSeasonPosters({ 1: "javascript:alert(1)" }, "series"), ValidationError);
   });
 });
 
@@ -352,26 +396,100 @@ describe("createTmdbClient", () => {
         return okResponse({ id: 550 });
       },
       async () => {
-        const client = createTmdbClient("plain-key", { cache });
+        const client = createTmdbClient("plain-key", { cache, now: () => 1000 });
         await client.getMovie(550);
         await client.getMovie(550);
       }
     );
     assert.equal(calls, 1);
-    assert.deepEqual(cache, { "movie:550": { id: 550 } });
+    assert.deepEqual(cache, { "movie:550": { fetchedAt: 1000, value: { id: 550 } } });
   });
 
-  test("known limitation: cached values never expire", async () => {
-    const cache = { "movie:550": { id: 550, title: "stale" } };
+  test("reuses a fresh cache entry without refetching", async () => {
+    const cache = { "movie:550": { fetchedAt: 1000, value: { id: 550, title: "fresh" } } };
     await withFetch(
       async () => {
         throw new Error("should not reach the network");
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => 1000 + TMDB_CACHE_TTL_MS - 1 });
+        assert.equal((await client.getMovie(550)).title, "fresh");
+      }
+    );
+  });
+
+  test("refetches an entry older than the 30 day cache expiry", async () => {
+    const cache = { "movie:550": { fetchedAt: 0, value: { id: 550, title: "stale" } } };
+    let calls = 0;
+    await withFetch(
+      async () => {
+        calls++;
+        return okResponse({ id: 550, title: "fresh" });
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => TMDB_CACHE_TTL_MS });
+        assert.equal((await client.getMovie(550)).title, "fresh");
+      }
+    );
+    assert.equal(calls, 1);
+    assert.equal(cache["movie:550"].value.title, "fresh");
+  });
+
+  test("refetches a legacy entry stored without fetchedAt", async () => {
+    const cache = { "movie:550": { id: 550, title: "stale" } };
+    let calls = 0;
+    await withFetch(
+      async () => {
+        calls++;
+        return okResponse({ id: 550, title: "fresh" });
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache });
+        assert.equal((await client.getMovie(550)).title, "fresh");
+      }
+    );
+    assert.equal(calls, 1);
+  });
+
+  test("falls back to an expired entry when the refetch fails", async () => {
+    const cache = { "movie:550": { fetchedAt: 0, value: { id: 550, title: "stale" } } };
+    await withFetch(
+      async () => ({ ok: false, status: 503, statusText: "Service Unavailable", json: async () => ({}) }),
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => TMDB_CACHE_TTL_MS });
+        assert.equal((await client.getMovie(550)).title, "stale");
+      }
+    );
+    assert.deepEqual(cache, { "movie:550": { fetchedAt: 0, value: { id: 550, title: "stale" } } });
+  });
+
+  test("falls back to a legacy entry when the refetch fails", async () => {
+    const cache = { "movie:550": { id: 550, title: "stale" } };
+    await withFetch(
+      async () => {
+        throw new Error("network down");
       },
       async () => {
         const client = createTmdbClient("plain-key", { cache });
         assert.equal((await client.getMovie(550)).title, "stale");
       }
     );
+  });
+
+  test("purgeTmdbCache drops keys that were not used this run", async () => {
+    const cache = {
+      "movie:550": { fetchedAt: 0, value: { id: 550 } },
+      "movie:1": { fetchedAt: 0, value: { id: 1, title: "deleted title" } },
+    };
+    await withFetch(
+      async () => okResponse({ id: 550 }),
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => 0 });
+        await client.getMovie(550);
+        purgeTmdbCache(cache, client.usedKeys);
+      }
+    );
+    assert.deepEqual(Object.keys(cache), ["movie:550"]);
   });
 
   test("throws a plain Error (not a ValidationError) on a failed response", async () => {
@@ -438,5 +556,41 @@ describe("resolveTmdbTarget", () => {
       () => resolveTmdbTarget({ source: "imdb", imdbId: "tt9999999" }, client),
       ValidationError
     );
+  });
+});
+
+describe("parseAddedTimestamps", () => {
+  test("maps each added path to its commit timestamp", () => {
+    const output = "\x00300\n\nmovies/550.yaml\nseries/1396.yaml\n\x00200\n\nmovies/680.yaml\n";
+    assert.deepEqual(
+      parseAddedTimestamps(output),
+      new Map([["movies/550.yaml", 300], ["series/1396.yaml", 300], ["movies/680.yaml", 200]])
+    );
+  });
+
+  test("a path deleted and added again keeps the date of its latest addition", () => {
+    const output = "\x00500\n\nmovies/550.yaml\n\x00300\n\nmovies/680.yaml\n\x00100\n\nmovies/550.yaml\n";
+    assert.equal(parseAddedTimestamps(output).get("movies/550.yaml"), 500);
+    assert.equal(parseAddedTimestamps(output).get("movies/680.yaml"), 300);
+  });
+
+  test("ignores paths before the first commit header and empty output", () => {
+    assert.deepEqual(parseAddedTimestamps("movies/1.yaml\n\x00100\n\nmovies/2.yaml\n"), new Map([["movies/2.yaml", 100]]));
+    assert.deepEqual(parseAddedTimestamps(""), new Map());
+  });
+});
+
+describe("isEntrypoint", () => {
+  test("matches the started script through a symlink and rejects other modules", () => {
+    const dir = mkdtempSync(join(tmpdir(), "entry-"));
+    const real = join(dir, "script.js");
+    const link = join(dir, "link.js");
+    writeFileSync(real, "");
+    symlinkSync(real, link);
+    const url = pathToFileURL(real).href;
+    assert.equal(isEntrypoint(url, real), true);
+    assert.equal(isEntrypoint(url, link), true);
+    assert.equal(isEntrypoint(url, join(dir, "other.js")), false);
+    assert.equal(isEntrypoint(url, undefined), false);
   });
 });

@@ -1,5 +1,5 @@
-import { tmdbUrl, imdbUrl, issueUrl, matchesSearch } from "./rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { tmdbUrl, imdbUrl, issueUrl, matchesSearch, telegramMessageId } from "./rules.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, debounce } from "./ui.js";
 import { renderAdd } from "./add.js";
 import { bindTitleEditing } from "./edit.js";
 import { renderBatch } from "./batch.js";
@@ -24,6 +24,9 @@ const views = {
 };
 const batchModeCheckbox = document.getElementById("batch-mode-checkbox");
 const batchBadge = document.getElementById("batch-badge");
+const catalogError = document.getElementById("catalog-error");
+
+const SEARCH_DEBOUNCE_MS = 150;
 
 let catalog = [];
 let byKey = new Map();
@@ -160,6 +163,7 @@ function seasonSortKey(season) {
 }
 
 function renderVersionRow(link, index) {
+  const messageId = telegramMessageId(link.link);
   return `
     <div class="version-row" data-index="${index}">
       <span class="badge">${esc(link.quality)}</span>
@@ -167,6 +171,7 @@ function renderVersionRow(link, index) {
       ${renderChips(link.subs, "chip--subs")}
       ${renderChips(link.tags, "")}
       <span class="chip">${esc(link.group)}</span>
+      ${messageId ? `<span class="version-row__msgid">#${esc(messageId)}</span>` : ""}
       <span class="version-row__tools">
         <button type="button" class="link-btn" data-edit>Editar</button>
         <button type="button" class="link-btn" data-reid>Reidentificar</button>
@@ -366,7 +371,12 @@ filterPanelToggle.addEventListener("click", () => {
 genreFilter.addEventListener("change", () => navigateGrid(true));
 tagFilter.addEventListener("change", () => navigateGrid(true));
 
-searchInput.addEventListener("input", () => navigateGrid(false));
+searchInput.addEventListener(
+  "input",
+  debounce(() => {
+    if (parseRoute().view === "grid") navigateGrid(false);
+  }, SEARCH_DEBOUNCE_MS)
+);
 
 window.addEventListener("hashchange", () => {
   visitedWithinApp = true;
@@ -387,7 +397,10 @@ onQueueChange(refreshBatchUi);
 refreshBatchUi();
 
 fetch("catalog.json", { cache: "no-cache" })
-  .then((res) => res.json())
+  .then((res) => {
+    if (!res.ok) throw new Error(`catalog.json: HTTP ${res.status}`);
+    return res.json();
+  })
   .then((data) => {
     catalog = data;
     byKey = new Map(catalog.map((item) => [`${item.type}/${item.tmdb}`, item]));
@@ -400,6 +413,9 @@ fetch("catalog.json", { cache: "no-cache" })
       }
     });
     route();
+  }, (err) => {
+    console.error("No se ha podido cargar catalog.json", err);
+    catalogError.classList.remove("hidden");
   });
 
 if ("serviceWorker" in navigator) {

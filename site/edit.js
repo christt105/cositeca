@@ -1,5 +1,5 @@
-import { tmdbUrl, issueUrl } from "./rules.js";
-import { esc } from "./ui.js";
+import { tmdbUrl, issueUrl, listFieldValue, newLanguageError } from "./rules.js";
+import { esc, checked } from "./ui.js";
 import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
 import { openReidentify } from "./reid.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
@@ -17,10 +17,6 @@ function queueOperation(view, type, fields, label) {
   const box = view.querySelector("#title-notice");
   const verb = replaced ? "Cambio actualizado en la cola" : "Añadido a la cola";
   box.innerHTML = `<p class="add__hint">${verb} (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>`;
-}
-
-function checked(form, name) {
-  return [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
 }
 
 function renderEditForm(row, item, link, meta) {
@@ -61,7 +57,9 @@ function renderEditForm(row, item, link, meta) {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const newLink = form.elements.link.value.trim();
-    const error = validateLink(newLink);
+    const newAudio = form.elements.new_audio_language.value.trim();
+    const newSubs = form.elements.new_subs_language.value.trim();
+    const error = validateLink(newLink) || newLanguageError(newAudio) || newLanguageError(newSubs);
     form.querySelector("[data-error]").textContent = error;
     if (error) return;
     const audio = checked(form, "audio");
@@ -73,15 +71,15 @@ function renderEditForm(row, item, link, meta) {
       new_link: newLink,
       quality: form.elements.quality.value,
       season: isSeries ? form.elements.season.value.trim() : "",
-      audio: audio.join(", "),
-      subs: subs.join(", "),
-      new_audio_language: form.elements.new_audio_language.value.trim(),
-      new_subs_language: form.elements.new_subs_language.value.trim(),
-      tags: tags || ((link.tags || []).length ? "-" : ""),
+      audio: listFieldValue(audio.join(", "), link.audio),
+      subs: listFieldValue(subs.join(", "), link.subs),
+      new_audio_language: newAudio,
+      new_subs_language: newSubs,
+      tags: listFieldValue(tags, link.tags),
     };
     const view = row.closest(".title");
     if (isBatchMode()) {
-      queueOperation(view, "fix", fields, `${item.title} — editar ${fields.quality}`);
+      queueOperation(view, "fix", fields, `${item.title} · editar ${fields.quality}`);
     } else {
       openIssue(view, issueUrl("fix.yml", fields));
     }
@@ -119,9 +117,9 @@ export async function bindTitleEditing(view, item) {
     row.querySelector("[data-delete]").addEventListener("click", () => {
       const what = item.type === "series" ? `${link.seasonName} ${link.quality}` : link.quality;
       if (!confirm(`¿Borrar el link ${what} de ${item.title}?`)) return;
-      const fields = { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link };
+      const fields = { tmdb: tmdbUrl(item.type, item.tmdb), old_link: link.link, new_link: "-" };
       if (isBatchMode()) {
-        queueOperation(view, "fix", fields, `${item.title} — borrar ${what}`);
+        queueOperation(view, "fix", fields, `${item.title} · borrar ${what}`);
       } else {
         openIssue(view, issueUrl("fix.yml", fields));
       }
@@ -158,7 +156,7 @@ export async function bindTitleEditing(view, item) {
     actions.querySelector("button").addEventListener("click", () => {
       const fields = { tmdb: tmdbUrl(item.type, item.tmdb), poster: choice ?? "" };
       if (isBatchMode()) {
-        queueOperation(view, "poster", fields, `${item.title} — portada`);
+        queueOperation(view, "poster", fields, `${item.title} · portada`);
       } else {
         openIssue(view, issueUrl("poster.yml", fields));
       }

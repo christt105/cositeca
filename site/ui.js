@@ -10,7 +10,8 @@ export function esc(text) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 export function typeIcon(type, extra = "") {
@@ -21,4 +22,23 @@ export function renderChips(values, className) {
   return (values || [])
     .map((v) => `<span class="chip ${className}">${esc(v)}</span>`)
     .join("");
+}
+
+/** Finder for elements by id inside `root`. */
+export function byIdIn(root) {
+  return (id) => root.querySelector(`#${id}`);
+}
+
+/** Values of the checked inputs named `name` inside `root`. */
+export function checked(root, name) {
+  return [...root.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
+}
+
+/** Wraps `fn` so a call only runs `ms` after the calls stop coming in. */
+export function debounce(fn, ms, timers = globalThis) {
+  let timer = null;
+  return (...args) => {
+    timers.clearTimeout(timer);
+    timer = timers.setTimeout(() => fn(...args), ms);
+  };
 }

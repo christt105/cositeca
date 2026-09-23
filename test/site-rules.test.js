@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
   TELEGRAM_LINK_RE,
@@ -10,11 +10,16 @@ import {
   tmdbUrl,
   imdbUrl,
   issueUrl,
+  listFieldValue,
   matchesSearch,
   normalizeText,
+  newLanguageError,
+  telegramMessageId,
+  findIndistinguishableVersions,
+  resolveProxyUrl,
 } from "../site/rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "../site/ui.js";
-import { GROUP_ID } from "./fixtures.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, debounce } from "../site/ui.js";
+import { GROUP_ID, link } from "./fixtures.js";
 
 describe("shared regexes", () => {
   test("TELEGRAM_LINK_RE captures group, optional topic and message", () => {
@@ -53,12 +58,26 @@ describe("shared regexes", () => {
     );
   });
 
-  test("known limitation: TMDB_URL_RE rejects trailing slashes, language prefixes and season URLs", () => {
+  test("TMDB_URL_RE accepts trailing slashes, language prefixes, queries and season URLs", () => {
+    for (const [value, expected] of [
+      ["https://www.themoviedb.org/movie/550/", ["movie", "550"]],
+      ["https://www.themoviedb.org/es/movie/550", ["movie", "550"]],
+      ["https://www.themoviedb.org/es-ES/movie/550-el-club-de-la-lucha/", ["movie", "550"]],
+      ["https://www.themoviedb.org/movie/550-fight-club?language=es-ES", ["movie", "550"]],
+      ["https://www.themoviedb.org/tv/1396/season/1", ["tv", "1396"]],
+      ["https://www.themoviedb.org/tv/1396-breaking-bad/season/2/", ["tv", "1396"]],
+    ]) {
+      assert.deepEqual(TMDB_URL_RE.exec(value)?.slice(1), expected, value);
+    }
+  });
+
+  test("TMDB_URL_RE rejects other TMDB pages and hosts", () => {
     for (const value of [
-      "https://www.themoviedb.org/movie/550/",
-      "https://www.themoviedb.org/es/movie/550",
-      "https://www.themoviedb.org/tv/1396/season/1",
       "https://www.themoviedb.org/person/287",
+      "https://www.themoviedb.org/movie/550/cast",
+      "https://www.themoviedb.org/tv/1396/season/one",
+      "https://www.themoviedb.org/spanish/movie/550",
+      "https://evil.example/themoviedb.org/movie/550",
     ]) {
       assert.equal(TMDB_URL_RE.test(value), false, value);
     }
@@ -70,15 +89,17 @@ describe("shared regexes", () => {
     assert.equal(TMDB_ID_RE.test("550"), false);
   });
 
-  test("IMDB_ID_RE accepts tt ids of any length", () => {
+  test("IMDB_ID_RE accepts tt ids of up to 12 digits", () => {
     assert.equal(IMDB_ID_RE.test("tt0137523"), true);
     assert.equal(IMDB_ID_RE.test("tt1"), true);
     assert.equal(IMDB_ID_RE.test("nm0000138"), false);
     assert.equal(IMDB_ID_RE.test("tt"), false);
   });
 
-  test("known limitation: IMDB_ID_RE does not cap the number of digits", () => {
-    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(40)}`), true);
+  test("IMDB_ID_RE rejects more than 12 digits", () => {
+    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(12)}`), true);
+    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(13)}`), false);
+    assert.equal(IMDB_ID_RE.test(`tt${"1".repeat(40)}`), false);
   });
 });
 
@@ -91,6 +112,13 @@ describe("URL helpers", () => {
 
   test("imdbUrl builds a title URL", () => {
     assert.equal(imdbUrl("tt0137523"), "https://www.imdb.com/title/tt0137523/");
+  });
+
+  test("listFieldValue sends \"-\" only when a list with values is emptied", () => {
+    assert.equal(listFieldValue("Castellano, Inglés", ["Castellano"]), "Castellano, Inglés");
+    assert.equal(listFieldValue("", ["Castellano"]), "-");
+    assert.equal(listFieldValue("", []), "");
+    assert.equal(listFieldValue("", undefined), "");
   });
 
   test("issueUrl points at the repo issue form and keeps the template", () => {
@@ -119,6 +147,22 @@ describe("URL helpers", () => {
   });
 });
 
+describe("resolveProxyUrl", () => {
+  test("a local override takes precedence over the fallback", () => {
+    assert.equal(resolveProxyUrl("http://localhost:8787", TMDB_PROXY_URL), "http://localhost:8787");
+  });
+
+  test("falls back to the deployed URL when there is no override", () => {
+    assert.equal(resolveProxyUrl(null, TMDB_PROXY_URL), TMDB_PROXY_URL);
+    assert.equal(resolveProxyUrl("", TMDB_PROXY_URL), TMDB_PROXY_URL);
+  });
+
+  test("is empty when neither an override nor a fallback is set", () => {
+    assert.equal(resolveProxyUrl(null, ""), "");
+    assert.equal(resolveProxyUrl("", undefined), "");
+  });
+});
+
 describe("ui helpers", () => {
   test("esc escapes the characters that break HTML text and double-quoted attributes", () => {
     assert.equal(esc(`<a href="x">Tom & Jerry</a>`), "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&lt;/a&gt;");
@@ -130,8 +174,8 @@ describe("ui helpers", () => {
     assert.equal(esc(0), "0");
   });
 
-  test("known limitation: esc does not escape single quotes", () => {
-    assert.equal(esc("it's"), "it's");
+  test("esc escapes single quotes for single-quoted attributes", () => {
+    assert.equal(esc("it's"), "it&#39;s");
   });
 
   test("typeIcon labels the icon and escapes the extra text", () => {
@@ -193,5 +237,135 @@ describe("matchesSearch", () => {
 describe("normalizeText", () => {
   test("lowercases and strips diacritics", () => {
     assert.equal(normalizeText("Árbol Ñandú"), "arbol nandu");
+  });
+});
+
+describe("telegramMessageId", () => {
+  test("reads the message id from a link without a topic", () => {
+    assert.equal(telegramMessageId(link(31341)), "31341");
+  });
+
+  test("reads the message id from a link with a topic", () => {
+    assert.equal(telegramMessageId(link(31341, 7)), "31341");
+  });
+
+  test("is empty for an invalid link", () => {
+    assert.equal(telegramMessageId("https://t.me/canal/42"), "");
+    assert.equal(telegramMessageId(""), "");
+    assert.equal(telegramMessageId(undefined), "");
+  });
+});
+
+describe("findIndistinguishableVersions", () => {
+  test("groups two entries with identical attributes", () => {
+    const a = { quality: "1080p", audio: ["Castellano"], link: link(1) };
+    const b = { quality: "1080p", audio: ["Castellano"], link: link(2) };
+    assert.deepEqual(findIndistinguishableVersions([a, b]), [[a, b]]);
+  });
+
+  test("ignores the order of audio, subs and tags", () => {
+    const a = { quality: "1080p", audio: ["Castellano", "Inglés"], tags: ["HDR", "Remux"], link: link(1) };
+    const b = { quality: "1080p", audio: ["Inglés", "Castellano"], tags: ["Remux", "HDR"], link: link(2) };
+    assert.deepEqual(findIndistinguishableVersions([a, b]), [[a, b]]);
+  });
+
+  test("treats a missing list the same as an empty one", () => {
+    const a = { quality: "1080p", subs: [], link: link(1) };
+    const b = { quality: "1080p", link: link(2) };
+    assert.deepEqual(findIndistinguishableVersions([a, b]), [[a, b]]);
+  });
+
+  test("does not flag entries with a different season or tags", () => {
+    const a = { season: 1, quality: "1080p", link: link(1) };
+    const b = { season: 2, quality: "1080p", link: link(2) };
+    const c = { season: 1, quality: "1080p", tags: ["Extendida"], link: link(3) };
+    assert.deepEqual(findIndistinguishableVersions([a, b, c]), []);
+  });
+
+  test("groups three indistinguishable entries together", () => {
+    const a = { quality: "4K", link: link(1) };
+    const b = { quality: "4K", link: link(2) };
+    const c = { quality: "4K", link: link(3) };
+    const d = { quality: "1080p", link: link(4) };
+    assert.deepEqual(findIndistinguishableVersions([a, b, c, d]), [[a, b, c]]);
+  });
+});
+
+describe("newLanguageError", () => {
+  test("is empty for nothing typed and for a single language", () => {
+    assert.equal(newLanguageError(""), "");
+    assert.equal(newLanguageError("   "), "");
+    assert.equal(newLanguageError("Portugués"), "");
+    assert.equal(newLanguageError("  Alemán   antiguo "), "");
+  });
+
+  test("explains the rule for commas, digits, punctuation and bad lengths", () => {
+    for (const value of ["Italiano, Portugués", "Latino 2", "<script>", "a", "a".repeat(31)]) {
+      assert.match(newLanguageError(value), /idioma nuevo/);
+    }
+  });
+});
+
+describe("debounce", () => {
+  test("does not run until ms have passed without another call", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let calls = 0;
+      const debounced = debounce(() => calls++, 150);
+      debounced();
+      mock.timers.tick(149);
+      assert.equal(calls, 0);
+      mock.timers.tick(1);
+      assert.equal(calls, 1);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("restarts the delay on every call", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let calls = 0;
+      const debounced = debounce(() => calls++, 150);
+      debounced();
+      mock.timers.tick(100);
+      debounced();
+      mock.timers.tick(100);
+      assert.equal(calls, 0);
+      mock.timers.tick(50);
+      assert.equal(calls, 1);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("calls fn with the arguments of the last call", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const seen = [];
+      const debounced = debounce((...args) => seen.push(args), 150);
+      debounced(1);
+      debounced(2);
+      mock.timers.tick(150);
+      assert.deepEqual(seen, [[2]]);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("independent call sites do not share a timer", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      let calls = 0;
+      const fn = () => calls++;
+      const a = debounce(fn, 150);
+      const b = debounce(fn, 150);
+      a();
+      b();
+      mock.timers.tick(150);
+      assert.equal(calls, 2);
+    } finally {
+      mock.timers.reset();
+    }
   });
 });

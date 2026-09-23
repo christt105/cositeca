@@ -4,9 +4,13 @@ import {
   FIELD_LABELS,
   parseIssueBody,
   checkAntiSpam,
+  reportFailure,
+  INTERNAL_ERROR_LABEL,
+  INTERNAL_ERROR_MESSAGE,
   describeResult,
   resultFiles,
 } from "../scripts/add-entry.js";
+import { ValidationError } from "../scripts/lib.js";
 import { link } from "./fixtures.js";
 
 const ADD_FIELDS = ["tmdb", "quality", "season", "audio", "subs", "tags", "poster", "link"];
@@ -73,19 +77,15 @@ describe("parseIssueBody", () => {
     assert.deepEqual(parseIssueBody("", ["tmdb", "quality"]), { tmdb: "", quality: "" });
   });
 
-  test("known bug B1: a CRLF body yields every field empty", () => {
+  test("parses a CRLF body exactly like its LF version", () => {
     const crlf = ADD_BODY.replace(/\n/g, "\r\n");
-    const fields = parseIssueBody(crlf, ADD_FIELDS);
-    assert.deepEqual(
-      fields,
-      Object.fromEntries(ADD_FIELDS.map((id) => [id, ""])),
-      "parseIssueBody does not normalise CRLF, so nothing matches"
-    );
+    assert.deepEqual(parseIssueBody(crlf, ADD_FIELDS), parseIssueBody(ADD_BODY, ADD_FIELDS));
   });
 
-  test("known bug B1: a single CRLF section is enough to lose that field", () => {
-    const body = "### Calidad\r\n\r\n1080p";
-    assert.equal(parseIssueBody(body, ["quality"]).quality, "");
+  test("reads a single CRLF section and bodies with stray carriage returns", () => {
+    assert.equal(parseIssueBody("### Calidad\r\n\r\n1080p", ["quality"]).quality, "1080p");
+    const cr = ADD_BODY.replace(/\n/g, "\r");
+    assert.deepEqual(parseIssueBody(cr, ADD_FIELDS), parseIssueBody(ADD_BODY, ADD_FIELDS));
   });
 
   test("every field id used by the workflows has a label", () => {
@@ -116,14 +116,19 @@ describe("checkAntiSpam", () => {
     assert.equal(typeof checkAntiSpam(daysAgo(400), 4), "string");
   });
 
-  test("known bug B22: a missing created_at lets everything through", () => {
-    assert.equal(checkAntiSpam(undefined, 0), null);
-    assert.equal(checkAntiSpam(null, 0), null);
-    assert.equal(checkAntiSpam("", 0), null);
+  test("blocks a missing or unparseable created_at", () => {
+    for (const createdAt of [undefined, null, "", "not a date"]) {
+      assert.equal(typeof checkAntiSpam(createdAt, 0), "string", String(createdAt));
+    }
   });
 
-  test("known bug B22: both reasons share the same message", () => {
-    assert.equal(checkAntiSpam(daysAgo(1), 0), checkAntiSpam(daysAgo(400), 4));
+  test("gives each rejection reason its own message", () => {
+    const tooNew = checkAntiSpam(daysAgo(1), 0);
+    const tooMany = checkAntiSpam(daysAgo(400), 4);
+    const unknown = checkAntiSpam(undefined, 0);
+    assert.equal(new Set([tooNew, tooMany, unknown]).size, 3);
+    assert.match(tooNew, /nueva/);
+    assert.match(tooMany, /abiertas/);
   });
 });
 
@@ -176,5 +181,86 @@ describe("resultFiles", () => {
     assert.deepEqual(resultFiles({ filePath: "movies/550.yaml", content: null, action: "delete" }), [
       { filePath: "movies/550.yaml", content: null },
     ]);
+  });
+});
+
+describe("reportFailure", () => {
+  function runners({ failOn, prCount = "0" } = {}) {
+    const calls = [];
+    const make = (tool) => (args) => {
+      calls.push([tool, ...args]);
+      if (failOn && failOn(tool, args)) throw new Error(`${tool} failed`);
+      return tool === "gh" && args[0] === "pr" ? `${prCount}\n` : "";
+    };
+    return { calls, gh: make("gh"), git: make("git") };
+  }
+
+  const base = { issueNumber: "7", branch: "bot/entry-7" };
+
+  test("explains a ValidationError, labels it invalid and does not rethrow", () => {
+    const { calls, gh, git } = runners();
+    reportFailure(new ValidationError("quality is required"), {
+      ...base, pushed: false, prCreated: false, gh, git,
+    });
+    assert.deepEqual(calls, [
+      ["gh", "issue", "comment", "7", "--body", "quality is required"],
+      ["gh", "issue", "edit", "7", "--add-label", "invalid"],
+    ]);
+  });
+
+  test("reports an internal error, labels the issue and rethrows it", () => {
+    const { calls, gh, git } = runners();
+    const err = new Error("TMDB /movie/999 failed: 404 Not Found");
+    assert.throws(
+      () => reportFailure(err, { ...base, pushed: false, prCreated: false, gh, git }),
+      (thrown) => thrown === err
+    );
+    assert.deepEqual(calls, [
+      ["gh", "issue", "comment", "7", "--body", INTERNAL_ERROR_MESSAGE],
+      ["gh", "issue", "edit", "7", "--add-label", INTERNAL_ERROR_LABEL],
+    ]);
+  });
+
+  test("deletes a pushed branch that never got a PR", () => {
+    const { calls, gh, git } = runners();
+    assert.throws(() =>
+      reportFailure(new Error("validate.yml did not start"), {
+        ...base, pushed: true, prCreated: false, gh, git,
+      })
+    );
+    assert.deepEqual(calls.at(-1), ["git", "push", "origin", "--delete", "bot/entry-7"]);
+  });
+
+  test("keeps the branch once the PR exists", () => {
+    const { calls, gh, git } = runners();
+    assert.throws(() =>
+      reportFailure(new Error("merge failed"), { ...base, pushed: true, prCreated: true, gh, git })
+    );
+    assert.equal(calls.some(([tool]) => tool === "git"), false);
+  });
+
+  test("keeps a pushed branch when GitHub already has a PR for it", () => {
+    const { calls, gh, git } = runners({ prCount: "1" });
+    assert.throws(() =>
+      reportFailure(new Error("pr create timed out"), { ...base, pushed: true, prCreated: false, gh, git })
+    );
+    assert.equal(calls.some(([tool]) => tool === "git"), false);
+  });
+
+  test("keeps going when a reporting step fails and still rethrows the original error", () => {
+    const { calls, gh, git } = runners({ failOn: (tool) => tool === "gh" });
+    const err = new Error("boom");
+    const originalConsoleError = console.error;
+    console.error = () => {};
+    try {
+      assert.throws(
+        () => reportFailure(err, { ...base, pushed: true, prCreated: false, gh, git }),
+        (thrown) => thrown === err
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+    assert.equal(calls.length, 3);
+    assert.equal(calls.some(([tool]) => tool === "git"), false);
   });
 });

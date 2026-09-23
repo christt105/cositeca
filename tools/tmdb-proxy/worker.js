@@ -2,9 +2,9 @@ const TMDB = "https://api.themoviedb.org/3";
 
 const ALLOWED_ORIGINS = [
   /^https:\/\/christt105\.github\.io$/,
-  /^https?:\/\/localhost(:\d+)?$/,
-  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^https?:\/\/localhost(:\d{1,5})?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d{1,5})?$/,
+  /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d{1,5})?$/,
 ];
 
 const ROUTES = [
@@ -47,10 +47,30 @@ const ROUTES = [
   },
 ];
 
+function parseOrigin(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedOrigin(origin) {
+  return Boolean(origin) && parseOrigin(origin) === origin && ALLOWED_ORIGINS.some((re) => re.test(origin));
+}
+
+/** The caller's origin: the Origin header, or the origin of the Referer when Origin is absent. */
+function requestOrigin(request) {
+  const origin = request.headers.get("Origin");
+  if (origin !== null) return origin;
+  return parseOrigin(request.headers.get("Referer"));
+}
+
 function corsHeaders(origin) {
-  const allowed = origin && ALLOWED_ORIGINS.some((re) => re.test(origin));
+  if (!isAllowedOrigin(origin)) return { Vary: "Origin" };
   return {
-    "Access-Control-Allow-Origin": allowed ? origin : "https://christt105.github.io",
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
@@ -67,17 +87,17 @@ function json(body, status, headers) {
 
 export default {
   async fetch(request, env, ctx) {
-    const origin = request.headers.get("Origin");
+    const origin = requestOrigin(request);
     const cors = corsHeaders(origin);
 
+    if (!isAllowedOrigin(origin)) {
+      return json({ error: "origin not allowed" }, 403, cors);
+    }
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: cors });
     }
     if (request.method !== "GET") {
       return json({ error: "method not allowed" }, 405, cors);
-    }
-    if (origin && !ALLOWED_ORIGINS.some((re) => re.test(origin))) {
-      return json({ error: "origin not allowed" }, 403, cors);
     }
 
     const url = new URL(request.url);
@@ -97,12 +117,14 @@ export default {
       return json({ error: "TMDB_API_KEY secret is not set" }, 500, cors);
     }
 
-    if (env.RATE_LIMITER) {
-      const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const { success } = await env.RATE_LIMITER.limit({ key: ip });
-      if (!success) {
-        return json({ error: "too many requests" }, 429, cors);
-      }
+    if (!env.RATE_LIMITER) {
+      console.error("RATE_LIMITER binding is missing; refusing to serve unlimited requests");
+      return json({ error: "rate limiter is not configured" }, 503, cors);
+    }
+    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const { success } = await env.RATE_LIMITER.limit({ key: ip });
+    if (!success) {
+      return json({ error: "too many requests" }, 429, cors);
     }
 
     const upstream = new URL(`${TMDB}${target.path}`);

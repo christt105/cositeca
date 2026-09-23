@@ -41,6 +41,11 @@ describe("extractOperationsJson", () => {
     assert.equal(extractOperationsJson(body), '[{"type":"add"}]');
   });
 
+  test("normalises stray carriage returns", () => {
+    const body = `${heading}\r\r[{"type":"add"}]`;
+    assert.equal(extractOperationsJson(body), '[{"type":"add"}]');
+  });
+
   test("returns an empty string when the heading is missing, empty or _No response_", () => {
     assert.equal(extractOperationsJson("### Calidad\n\n1080p"), "");
     assert.equal(extractOperationsJson(""), "");
@@ -177,6 +182,49 @@ describe("applyBatch", () => {
     assert.deepEqual(data.links, [{ quality: "4K", link: link(15) }]);
   });
 
+  test("a fix clears audio and subs with the \"-\" convention", async () => {
+    writeFileSync(
+      join(root, "movies/550.yaml"),
+      yaml({
+        title: "El club de la lucha",
+        links: [{ quality: "1080p", audio: ["Castellano"], subs: ["Inglés"], tags: ["Extendida"], link: link(1) }],
+      })
+    );
+    const result = await applyBatch(
+      [{ type: "fix", tmdb: MOVIE_URL, old_link: link(1), new_link: link(1), audio: "-", subs: "-", tags: "" }],
+      ctx()
+    );
+    assert.deepEqual(result.skipped, []);
+    fs.flush();
+    const data = load(readFileSync(join(root, "movies/550.yaml"), "utf8"));
+    assert.deepEqual(data.links, [{ quality: "1080p", tags: ["Extendida"], link: link(1) }]);
+  });
+
+  test("a fix without new_link but with other fields keeps the link", async () => {
+    const result = await applyBatch(
+      [
+        { type: "fix", tmdb: MOVIE_URL, old_link: link(1), newlink: link(20) },
+        { type: "fix", tmdb: MOVIE_URL, old_link: link(1), quality: "4K" },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", link: link(1) },
+      ],
+      ctx()
+    );
+    assert.equal(result.applied.length, 2);
+    assert.deepEqual(result.skipped, [
+      `operación 3: link already exists in the catalog: ${link(1)}`,
+    ]);
+    fs.flush();
+    const data = load(readFileSync(join(root, "movies/550.yaml"), "utf8"));
+    assert.deepEqual(data.links, [{ quality: "4K", link: link(1) }]);
+  });
+
+  test("a fix with \"-\" as new_link deletes the link", async () => {
+    const result = await applyBatch([{ type: "fix", tmdb: TV_URL, old_link: link(2), new_link: "-" }], ctx());
+    assert.equal(result.applied.length, 1);
+    fs.flush();
+    assert.equal(existsSync(join(root, "series/1396.yaml")), false);
+  });
+
   test("an operation on a file deleted earlier in the batch is skipped", async () => {
     const result = await applyBatch(
       [
@@ -243,6 +291,54 @@ describe("applyBatch", () => {
     assert.deepEqual(result.applied, []);
     assert.deepEqual(result.skipped, [
       "operación 1: quality \"720p\" is not one of: 1080p, 4K",
+    ]);
+  });
+
+  test("skips an operation with a non-string field instead of aborting the batch", async () => {
+    const result = await applyBatch(
+      [
+        { type: "poster", tmdb: MOVIE_URL, poster: 42 },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", audio: ["Castellano"], link: link(22) },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", link: link(23) },
+      ],
+      ctx()
+    );
+    assert.equal(result.applied.length, 1);
+    assert.match(result.applied[0], /^operación 3: /);
+    assert.deepEqual(result.skipped, [
+      "operación 1: poster must be a string, got number",
+      "operación 2: audio must be a string, got array",
+    ]);
+  });
+
+  test("skips an operation whose type is an Object.prototype key", async () => {
+    const result = await applyBatch(
+      [
+        { type: "toString", tmdb: MOVIE_URL },
+        { type: "constructor", tmdb: MOVIE_URL },
+        { type: "add", tmdb: MOVIE_URL, quality: "4K", link: link(24) },
+      ],
+      ctx()
+    );
+    assert.equal(result.applied.length, 1);
+    assert.deepEqual(result.skipped, [
+      'operación 1: tipo de operación desconocido, se omite: "toString"',
+      'operación 2: tipo de operación desconocido, se omite: "constructor"',
+    ]);
+  });
+
+  test("skips an operation with a non-string season instead of reading it as 0", async () => {
+    const result = await applyBatch(
+      [
+        { type: "add", tmdb: TV_URL, quality: "4K", season: [], link: link(25) },
+        { type: "add", tmdb: TV_URL, quality: "4K", season: true, link: link(26) },
+      ],
+      ctx()
+    );
+    assert.deepEqual(result.applied, []);
+    assert.deepEqual(result.skipped, [
+      'operación 1: season must be "all" or an integer >= 0, got []',
+      'operación 2: season must be "all" or an integer >= 0, got true',
     ]);
   });
 

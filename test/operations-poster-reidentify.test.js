@@ -68,7 +68,7 @@ describe("processPoster", () => {
     await assert.rejects(() => processPoster({ tmdb: "", poster: "https://a" }, ctx), ValidationError);
   });
 
-  test("known bug B6: changing the poster drops seasonPosters", async () => {
+  test("keeps seasonPosters when the poster changes or is cleared", async () => {
     const { ctx } = deps({
       "series/1396.yaml": yaml({
         title: "Breaking Bad",
@@ -76,8 +76,13 @@ describe("processPoster", () => {
         links: [{ season: 1, quality: "1080p", link: link(1) }],
       }),
     });
-    const result = await processPoster({ tmdb: TV_URL, poster: "https://image.tmdb.org/t/p/w342/new.jpg" }, ctx);
-    assert.equal(load(result.content).seasonPosters, undefined);
+    const seasonPosters = { 1: "https://image.tmdb.org/t/p/w342/s1.jpg" };
+    const changed = await processPoster({ tmdb: TV_URL, poster: "https://image.tmdb.org/t/p/w342/new.jpg" }, ctx);
+    assert.deepEqual(load(changed.content).seasonPosters, seasonPosters);
+    assert.equal(load(changed.content).poster, "https://image.tmdb.org/t/p/w342/new.jpg");
+    const cleared = await processPoster({ tmdb: TV_URL, poster: "" }, ctx);
+    assert.deepEqual(load(cleared.content).seasonPosters, seasonPosters);
+    assert.equal(load(cleared.content).poster, undefined);
   });
 });
 
@@ -276,11 +281,11 @@ describe("processReidentify", () => {
     assert.equal(load(result.files[0].content).poster, undefined);
   });
 
-  test("known bug: a non-string poster throws TypeError instead of ValidationError", async () => {
+  test("rejects a non-string poster with a ValidationError naming the field", async () => {
     const { ctx } = deps(sourceMovie);
     await assert.rejects(
       () => processReidentify({ tmdb: MOVIE_URL, new_tmdb: OTHER_MOVIE_URL, poster: 42 }, ctx),
-      TypeError
+      (err) => err instanceof ValidationError && err.message === "poster must be a string, got number"
     );
   });
 });

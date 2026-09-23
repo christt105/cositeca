@@ -141,6 +141,42 @@ describe("processAdd", () => {
     assert.deepEqual(cfg.languages.subs, config().languages.subs);
   });
 
+  test("reuses the canonical spelling of an existing language regardless of accents", async () => {
+    const { ctx, cfg } = deps();
+    const result = await processAdd(
+      { tmdb: MOVIE_URL, quality: "1080p", new_audio_language: "INGLES", new_subs_language: "ingles", link: link(12) },
+      ctx
+    );
+    assert.equal(result.languagesChanged, false);
+    assert.deepEqual(load(result.content).links[0].audio, ["Inglés"]);
+    assert.deepEqual(load(result.content).links[0].subs, ["Inglés"]);
+    assert.deepEqual(cfg.languages, config().languages);
+  });
+
+  test("reuses the spelling a new language already has in the other list", async () => {
+    const { ctx, cfg } = deps();
+    const result = await processAdd(
+      { tmdb: MOVIE_URL, quality: "1080p", new_subs_language: "latino", link: link(14) },
+      ctx
+    );
+    assert.equal(result.languagesChanged, true);
+    assert.deepEqual(load(result.content).links[0].subs, ["Latino"]);
+    assert.deepEqual(cfg.languages.subs, [...config().languages.subs, "Latino"]);
+    assert.deepEqual(cfg.languages.audio, config().languages.audio);
+  });
+
+  test("rejects two languages typed in the new language field", async () => {
+    const { ctx, cfg } = deps();
+    await assert.rejects(
+      processAdd(
+        { tmdb: MOVIE_URL, quality: "1080p", new_subs_language: "Italiano, Portugués", link: link(13) },
+        ctx
+      ),
+      ValidationError
+    );
+    assert.deepEqual(cfg.languages, config().languages);
+  });
+
   test("does not duplicate a language already picked in the checkboxes", async () => {
     const { ctx } = deps();
     const result = await processAdd(
@@ -209,11 +245,19 @@ describe("processAdd", () => {
     );
   });
 
-  test("known bug: a non-string list field throws TypeError instead of ValidationError", async () => {
+  test("rejects a non-string list field with a ValidationError naming the field", async () => {
     const { ctx } = deps();
     await assert.rejects(
       () => processAdd({ tmdb: MOVIE_URL, quality: "1080p", audio: ["Castellano"], link: link(21) }, ctx),
-      TypeError
+      (err) => err instanceof ValidationError && err.message === "audio must be a string, got array"
+    );
+  });
+
+  test("rejects a non-string poster with a ValidationError naming the field", async () => {
+    const { ctx } = deps();
+    await assert.rejects(
+      () => processAdd({ tmdb: MOVIE_URL, quality: "1080p", poster: 42, link: link(22) }, ctx),
+      (err) => err instanceof ValidationError && err.message === "poster must be a string, got number"
     );
   });
 
@@ -236,7 +280,7 @@ describe("processAdd", () => {
     );
   });
 
-  test("known bug B6: a new poster drops seasonPosters", async () => {
+  test("keeps seasonPosters when a new poster is sent", async () => {
     const { ctx } = deps({
       files: {
         "series/1396.yaml": yaml({
@@ -250,7 +294,10 @@ describe("processAdd", () => {
       { tmdb: TV_URL, quality: "4K", season: "1", poster: "https://image.tmdb.org/t/p/w342/new.jpg", link: link(19) },
       ctx
     );
-    assert.equal(load(result.content).seasonPosters, undefined);
+    const data = load(result.content);
+    assert.deepEqual(Object.keys(data), ["title", "poster", "seasonPosters", "links"]);
+    assert.equal(data.poster, "https://image.tmdb.org/t/p/w342/new.jpg");
+    assert.deepEqual(data.seasonPosters, { 1: "https://image.tmdb.org/t/p/w342/s1.jpg" });
   });
 
   test("keeps seasonPosters when no poster is sent", async () => {

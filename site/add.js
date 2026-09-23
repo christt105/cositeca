@@ -6,22 +6,24 @@ import {
   TELEGRAM_LINK_RE,
   tmdbUrl,
   issueUrl,
+  newLanguageError,
+  resolveProxyUrl,
 } from "./rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked, debounce } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
 const view = document.getElementById("view-add");
 const IMG = "https://image.tmdb.org/t/p";
+const SEARCH_DEBOUNCE_MS = 300;
 
 let meta = null;
 let ctx = { catalog: [], byKey: new Map() };
-let searchTimer = null;
 let requestSeq = 0;
 let selected = null;
 let posterChoice = null;
 
 function proxyUrl() {
-  return TMDB_PROXY_URL || localStorage.getItem("tmdbProxy") || "";
+  return resolveProxyUrl(localStorage.getItem("tmdbProxy"), TMDB_PROXY_URL);
 }
 
 export async function proxyGet(path) {
@@ -54,9 +56,7 @@ export function nameOf(result) {
   return result.title || result.name || "";
 }
 
-function $(id) {
-  return view.querySelector(`#${id}`);
-}
+const $ = byIdIn(view);
 
 export async function renderAdd(params, context) {
   ctx = context;
@@ -84,10 +84,10 @@ export async function renderAdd(params, context) {
     <div id="add-outcome"></div>
   `;
   const input = $("add-search");
-  input.addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => handleQuery(input.value.trim()), 300);
-  });
+  input.addEventListener(
+    "input",
+    debounce(() => handleQuery(input.value.trim()), SEARCH_DEBOUNCE_MS)
+  );
   const tmdb = params.get("tmdb");
   const q = params.get("q");
   if (tmdb) {
@@ -160,7 +160,7 @@ function renderResults(items) {
       const inCatalog = ctx.byKey.has(catalogKey(r.media_type, r.id));
       return `
         <button type="button" class="result" data-type="${r.media_type}" data-id="${r.id}">
-          <img class="result__poster" src="${r.poster_path ? `${IMG}/w92${r.poster_path}` : ""}" alt="" loading="lazy">
+          <img class="result__poster" src="${r.poster_path ? esc(`${IMG}/w92${r.poster_path}`) : ""}" alt="" loading="lazy">
           <span class="result__info">
             <span class="result__title">${esc(nameOf(r))}</span>
             <span class="result__meta">${typeIcon(type)} ${TYPE_LABELS[type]} ${esc(yearOf(r))}${inCatalog ? ' <span class="chip">Ya en la Cositeca</span>' : ""}</span>
@@ -251,8 +251,8 @@ export async function renderPosterPicker(box, type, id, defaultPoster, onChoose)
       </button>
       ${posters
         .map((p) => `
-          <button type="button" class="poster" data-poster="${IMG}/w342${p.file_path}">
-            <img src="${IMG}/w185${p.file_path}" alt="" loading="lazy"><span>${p.iso_639_1 ?? "sin texto"}</span>
+          <button type="button" class="poster" data-poster="${esc(`${IMG}/w342${p.file_path}`)}">
+            <img src="${esc(`${IMG}/w185${p.file_path}`)}" alt="" loading="lazy"><span>${esc(p.iso_639_1 ?? "sin texto")}</span>
           </button>`)
         .join("")}
     </div>
@@ -323,6 +323,7 @@ function renderForm() {
     <div class="add__label">Subtítulos</div>
     <div class="checks">${checkboxGroup("subs", meta.languages.subs)}</div>
     <input id="add-subs-other" class="search" type="text" maxlength="30" placeholder="Otro idioma de subtítulos (opcional)">
+    <p id="add-language-error" class="add__error"></p>
     <label class="add__label" for="add-tags">Etiquetas (opcional, separadas por comas)</label>
     <input id="add-tags" class="search" type="text" placeholder="HDR, REMUX">
     <button type="submit" class="btn btn--add add__submit">Aceptar</button>
@@ -374,15 +375,15 @@ export function validateLink(link) {
   return "";
 }
 
-function checked(name) {
-  return [...view.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
-}
-
 function buildAddFields() {
   const link = $("add-link").value.trim();
   const error = validateLink(link);
   $("add-link-error").textContent = error;
-  if (!link || error) return null;
+  const newAudio = $("add-audio-other").value.trim();
+  const newSubs = $("add-subs-other").value.trim();
+  const languageError = newLanguageError(newAudio) || newLanguageError(newSubs);
+  $("add-language-error").textContent = languageError;
+  if (!link || error || languageError) return null;
   const seasonValue = selected.type === "tv"
     ? ($("add-season").value === "other" ? $("add-season-other").value.trim() : $("add-season").value)
     : "";
@@ -390,10 +391,10 @@ function buildAddFields() {
     tmdb: tmdbUrl(toSiteType(selected.type), selected.id),
     quality: $("add-quality").value,
     season: seasonValue,
-    audio: checked("audio").join(", "),
-    subs: checked("subs").join(", "),
-    new_audio_language: $("add-audio-other").value.trim(),
-    new_subs_language: $("add-subs-other").value.trim(),
+    audio: checked(view, "audio").join(", "),
+    subs: checked(view, "subs").join(", "),
+    new_audio_language: newAudio,
+    new_subs_language: newSubs,
     tags: $("add-tags").value.trim(),
     poster: posterChoice ?? "",
     link,
@@ -402,7 +403,7 @@ function buildAddFields() {
 
 function addLabel(fields) {
   const season = fields.season ? ` T${fields.season}` : "";
-  return `${selected.title} — añadir ${fields.quality}${season}`;
+  return `${selected.title} · añadir ${fields.quality}${season}`;
 }
 
 function updateOutcome() {

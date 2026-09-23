@@ -29,9 +29,19 @@ synopses). Deployed on GitHub Pages.
 - New entries, link fixes/deletions and poster changes come in through
   GitHub Issue forms (`add.yml`, `fix.yml`, `poster.yml`, `reidentify.yml`, told apart by
   their `add`/`fix`/`poster` label), processed by
-  `.github/workflows/add-entry.yml`, which commits directly to `main`. The
+  `.github/workflows/add-entry.yml`, which pushes a `bot/entry-<issue>`
+  branch, opens a PR, and squash-merges it once `validate.yml` passes. The
   title page and the add page open those forms with every field prefilled
-  by query string, so users only review and submit.
+  by query string, so users only review and submit. Both issue workflows
+  (`add-entry.yml` and `batch.yml`) run on `opened` and `edited`, but only
+  for open issues without the `bug` label, so editing an applied (closed)
+  issue does nothing and an issue that failed with `invalid` can be fixed
+  by editing it. They share the `catalog-writes` concurrency group, so
+  only one run writes to the catalog at a time.
+- `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
+  `new_link` is empty and no other field is filled. An empty `new_link`
+  next to any other field keeps the current link. The same rule applies to
+  `fix` operations in batch mode.
 - `reidentify.yml` moves one link (`old_link`) or, if empty, every link of
   the entry at `tmdb` to another title (`new_tmdb`), creating the target
   file or appending to an existing one and deleting the source if it ends
@@ -85,14 +95,15 @@ Validation rules (implemented once in `scripts/lib.js`, reused by `validate`,
   group id must exist in `groups.yaml`. Invite links (`t.me/+...`,
   `joinchat`, or anything not starting with `https://t.me/c/`) are rejected.
 - The same `link` cannot appear twice in the whole repository.
-- `poster`, if present, must be a non-empty string and is used as-is instead
+- `poster`, if present, must be an `https://` URL and is used as-is instead
   of the TMDB poster. The add issue form has an optional Portada field for
   it; the bot writes it at the top of the file (and replaces an existing
   one).
 - `seasonPosters`, series only, optional: a map from a `season` value (same
   number or `"all"` used in `links`) to a poster URL. Checked before the
   TMDB season poster, and used as the fallback when TMDB has no poster for
-  that season or the season doesn't exist there at all.
+  that season or the season doesn't exist there at all. Values must be
+  `https://` URLs too.
 
 ## Tests
 
@@ -119,7 +130,9 @@ A minimal client in `scripts/lib.js` uses native `fetch`. If the API key
 starts with `eyJ` it is sent as a `Bearer` token, otherwise as `?api_key=`.
 Every request uses `language=es-ES`. Titles can be identified by a
 `themoviedb.org` URL, a `tmdb:<id>` reference, or an IMDB id (resolved via
-`/3/find`).
+`/3/find`). URLs may carry a language prefix (`/es/movie/550`), a slug, a
+trailing slash, a query string or a `/season/<n>` suffix; the season in the
+URL is ignored, it still has to go in the Temporada field.
 
 `validate` and `build` share a JSON response cache (`.cache/tmdb.json` by
 default, override with `TMDB_CACHE_PATH`) so re-running them only fetches
@@ -156,11 +169,15 @@ always with `language=es-ES`, and rejects anything else with 404:
   the seasons list)
 - `GET /find/<imdbId>` (resolve an IMDB id)
 
-CORS is limited to `https://christt105.github.io`, `localhost`,
-`127.0.0.1` and `192.168.x.x` (local previews). Responses are cached at
-the edge (1 h for searches, 1 day for images and series) and a
-`[[ratelimits]]` binding caps each IP at 60 requests per minute so the
-Worker cannot be used as a public TMDB mirror.
+Only `https://christt105.github.io`, `http://localhost`,
+`http://127.0.0.1` and `http://192.168.x.x` (local previews, any port) are
+served: the `Origin` header (or, when it is absent, the origin of
+`Referer`) must match one of them exactly, otherwise the Worker answers
+403, so requests without either header (curl, scripts) are rejected.
+Responses are cached at the edge (1 h for searches, 1 day for images and
+series) and a `[[ratelimits]]` binding caps each IP at 60 requests per
+minute so the Worker cannot be used as a public TMDB mirror. If that
+binding is missing the Worker answers 503 instead of serving unlimited.
 
 Local development (no account needed): put `TMDB_API_KEY=...` in
 `tools/tmdb-proxy/.dev.vars` (gitignored) and run
@@ -176,9 +193,10 @@ npx wrangler secret put TMDB_API_KEY
 
 The Worker is deployed at
 `https://cositeca-tmdb-proxy.christt105.workers.dev`, which is the
-`TMDB_PROXY_URL` constant in `site/rules.js`. If that constant were empty
-the page would use `localStorage.tmdbProxy` if set (development only) and
-otherwise fall back to the plain GitHub issue form.
+`TMDB_PROXY_URL` constant in `site/rules.js`. Setting
+`localStorage.tmdbProxy` in the browser (e.g. to `http://localhost:8787`
+while running `wrangler dev`) overrides that constant, which is handy for
+local development; leave it unset to use the deployed Worker.
 
 ## Catalog order
 
