@@ -173,7 +173,7 @@ async function onLink(env, chatId, session, text) {
 
 async function onTitle(env, chatId, session, text) {
   if (!text) return sendMessage(env, chatId, "Escríbeme el título para buscarlo en TMDB.");
-  const results = await searchTmdb(text);
+  const results = await searchTmdb(env, text);
   const candidates = formatCandidates(results);
   if (!candidates.length) {
     return sendMessage(env, chatId, "No he encontrado nada en TMDB con ese título. Prueba con otro nombre.");
@@ -351,12 +351,14 @@ async function onConfirm(env, chatId, session, value, callbackId) {
   }
 }
 
-async function searchTmdb(query) {
+async function searchTmdb(env, query) {
   const url = new URL(`${TMDB_PROXY_URL}/search`);
   url.searchParams.set("q", query);
   url.searchParams.set("type", "multi");
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TMDB proxy search failed: ${res.status}`);
+  const res = await env.TMDB_PROXY.fetch(url);
+  if (!res.ok) {
+    throw new Error(`TMDB proxy search failed: ${res.status}`);
+  }
   const data = await res.json();
   return data.results ?? [];
 }

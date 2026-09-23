@@ -8,3 +8,7 @@ enabled = false
 [[kv_namespaces]]
 binding = "BOT_KV"
 id = "dd15d41ca6be4acbb285c17e41ff784e"
+
+[[services]]
+binding = "TMDB_PROXY"
+service = "cositeca-tmdb-proxy"
