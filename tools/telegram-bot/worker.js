@@ -4,12 +4,14 @@ import {
   BotValidationError,
   buildIssueBody,
   buildLanguageKeyboard,
+  buildParsedSummary,
   buildSummary,
   formatCandidates,
   newSession,
   parseTelegramLink,
   toggleLanguage,
 } from "./lib.js";
+import { parseEntryLine, parseLanguages } from "./parse.js";
 
 const REPO = "christt105/cositeca";
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main`;
@@ -117,6 +119,12 @@ async function handleMessage(env, message) {
   }
 
   const session = (await getSession(env, chatId)) ?? newSession();
+
+  const isForward = message.forward_origin || message.forward_from || message.forward_from_chat;
+  if (isForward && text && (session.step === "AWAIT_LINK" || session.step === "AWAIT_TITLE")) {
+    return onForward(env, chatId, session, text);
+  }
+
   switch (session.step) {
     case "AWAIT_LINK":
       return onLink(env, chatId, session, text);
@@ -146,6 +154,7 @@ async function handleCallback(env, cq) {
   const session = (await getSession(env, chatId)) ?? newSession();
   const [prefix, value] = cq.data.split(/:(.+)/);
 
+  if (prefix === "parsed") return onParsedChoice(env, chatId, session, value, cq.id);
   if (prefix === "pick") return onPick(env, chatId, session, value, cq.id);
   if (prefix === "quality") return onQuality(env, chatId, session, value, cq.id);
   if (prefix === "a") return onLanguageCallback(env, chatId, messageId, session, "audio", value, cq.id);
@@ -166,6 +175,10 @@ async function onLink(env, chatId, session, text) {
     throw err;
   }
   session.fields.link = link;
+  if (session.parsed?.confirmed) {
+    await setSession(env, chatId, session);
+    return runTmdbSearch(env, chatId, session, session.parsed.title, session.parsed.year);
+  }
   session.step = "AWAIT_TITLE";
   await setSession(env, chatId, session);
   await sendMessage(env, chatId, "¿Cómo se llama la película o serie?");
@@ -173,8 +186,12 @@ async function onLink(env, chatId, session, text) {
 
 async function onTitle(env, chatId, session, text) {
   if (!text) return sendMessage(env, chatId, "Escríbeme el título para buscarlo en TMDB.");
-  const results = await searchTmdb(env, text);
-  const candidates = formatCandidates(results);
+  return runTmdbSearch(env, chatId, session, text);
+}
+
+async function runTmdbSearch(env, chatId, session, query, preferredYear) {
+  const results = await searchTmdb(env, query);
+  const candidates = formatCandidates(results, 5, preferredYear);
   if (!candidates.length) {
     return sendMessage(env, chatId, "No he encontrado nada en TMDB con ese título. Prueba con otro nombre.");
   }
@@ -184,6 +201,43 @@ async function onTitle(env, chatId, session, text) {
   const keyboard = candidates.map((c) => [{ text: c.label, callback_data: `pick:${c.idx}` }]);
   keyboard.push([{ text: "🔍 Buscar otra vez", callback_data: "pick:retry" }]);
   await sendMessage(env, chatId, "¿Cuál de estos es?", keyboard);
+}
+
+async function onForward(env, chatId, session, text) {
+  const parsed = parseEntryLine(text);
+  if (!parsed) {
+    return sendMessage(env, chatId, "No he podido leer el formato del mensaje automáticamente, vamos paso a paso.");
+  }
+  const languages = await getConfig(env, "languages.yaml");
+  const { audio, subs } = parseLanguages(text, languages);
+  session.parsed = { ...parsed, audio, subs };
+  await setSession(env, chatId, session);
+  await sendMessage(env, chatId, buildParsedSummary(session.parsed), [
+    [
+      { text: "✅ Usar esto", callback_data: "parsed:yes" },
+      { text: "✏️ Paso a paso", callback_data: "parsed:no" },
+    ],
+  ]);
+}
+
+async function onParsedChoice(env, chatId, session, value, callbackId) {
+  await answerCallback(env, callbackId);
+  if (value !== "yes") {
+    delete session.parsed;
+    await setSession(env, chatId, session);
+    return sendMessage(
+      env,
+      chatId,
+      session.fields.link ? "Vale, ¿cómo se llama la película o serie?" : "Vale, pégame el link del mensaje de Telegram (usa 'Copiar enlace')."
+    );
+  }
+  session.parsed.confirmed = true;
+  if (!session.fields.link) {
+    await setSession(env, chatId, session);
+    return sendMessage(env, chatId, "Genial. Ahora pégame el link del mensaje de Telegram (usa 'Copiar enlace') para terminar.");
+  }
+  await setSession(env, chatId, session);
+  return runTmdbSearch(env, chatId, session, session.parsed.title, session.parsed.year);
 }
 
 async function onPick(env, chatId, session, value, callbackId) {
@@ -201,6 +255,10 @@ async function onPick(env, chatId, session, value, callbackId) {
   session.title = candidate.title;
   await answerCallback(env, callbackId, `Elegido: ${candidate.title}`);
 
+  if (session.parsed?.confirmed) {
+    return applyParsedAndContinue(env, chatId, session, candidate);
+  }
+
   if (candidate.type === "tv") {
     session.step = "AWAIT_SEASON";
     await setSession(env, chatId, session);
@@ -209,6 +267,26 @@ async function onPick(env, chatId, session, value, callbackId) {
   session.step = "AWAIT_QUALITY";
   await setSession(env, chatId, session);
   return sendQualityStep(env, chatId);
+}
+
+async function applyParsedAndContinue(env, chatId, session, candidate) {
+  const p = session.parsed;
+  if (!p.quality) {
+    session.step = "AWAIT_QUALITY";
+    await setSession(env, chatId, session);
+    return sendQualityStep(env, chatId);
+  }
+  session.fields.quality = p.quality;
+  if (candidate.type === "tv" && p.season !== undefined) {
+    session.fields.season = String(p.season);
+  }
+  session.audioSelected = p.audio ?? [];
+  session.subsSelected = p.subs ?? [];
+  if (session.audioSelected.length) session.fields.audio = session.audioSelected.join(", ");
+  if (session.subsSelected.length) session.fields.subs = session.subsSelected.join(", ");
+  session.step = "AWAIT_TAGS";
+  await setSession(env, chatId, session);
+  return sendTagsStep(env, chatId, p.tags?.length ? p.tags.join(", ") : undefined);
 }
 
 async function onSeason(env, chatId, session, text) {
@@ -298,8 +376,9 @@ async function onNewLanguage(env, chatId, session, text, kind) {
   return sendLanguageStep(env, chatId, session, kind);
 }
 
-function sendTagsStep(env, chatId) {
-  return sendMessage(env, chatId, "¿Etiquetas? Sepáralas por comas, o pulsa Saltar.", [
+function sendTagsStep(env, chatId, hint) {
+  const suffix = hint ? ` (he detectado: ${hint})` : "";
+  return sendMessage(env, chatId, `¿Etiquetas? Sepáralas por comas, o pulsa Saltar.${suffix}`, [
     [{ text: "Saltar", callback_data: "tags:skip" }],
   ]);
 }

@@ -59,18 +59,22 @@ export function parseTelegramLink(link, groups) {
   return trimmed;
 }
 
-export function formatCandidates(results, limit = 5) {
-  return results
+export function formatCandidates(results, limit = 5, preferredYear) {
+  const withYear = results
     .filter((r) => r.media_type === "movie" || r.media_type === "tv")
-    .slice(0, limit)
-    .map((r, idx) => {
+    .map((r) => {
       const type = r.media_type;
-      const title = type === "movie" ? r.title : r.name;
       const dateStr = type === "movie" ? r.release_date : r.first_air_date;
-      const year = dateStr ? dateStr.slice(0, 4) : "????";
-      const icon = type === "movie" ? "🎬" : "📺";
-      return { idx, type, id: r.id, title, year, label: `${icon} ${title} (${year})`, url: tmdbUrl(type, r.id) };
+      return { r, type, year: dateStr ? dateStr.slice(0, 4) : "????" };
     });
+  if (preferredYear) {
+    withYear.sort((a, b) => Number(b.year === preferredYear) - Number(a.year === preferredYear));
+  }
+  return withYear.slice(0, limit).map(({ r, type, year }, idx) => {
+    const title = type === "movie" ? r.title : r.name;
+    const icon = type === "movie" ? "🎬" : "📺";
+    return { idx, type, id: r.id, title, year, label: `${icon} ${title} (${year})`, url: tmdbUrl(type, r.id) };
+  });
 }
 
 export function toggleLanguage(selected, lang) {
@@ -105,6 +109,19 @@ export function buildSummary(session) {
     `Link: ${f.link}`,
   ].filter(Boolean);
   return `Voy a crear esta entrada:\n\n${lines.join("\n")}\n\n¿Confirmas?`;
+}
+
+export function buildParsedSummary(parsed) {
+  const lines = [
+    `Tipo: ${parsed.kind === "series" ? "Serie" : "Película"}`,
+    `Título: ${parsed.title}${parsed.year ? ` (${parsed.year})` : ""}`,
+    parsed.kind === "series" ? `Temporada: ${parsed.season}` : null,
+    `Calidad: ${parsed.quality ?? "no detectada"}`,
+    parsed.tags?.length ? `Etiquetas: ${parsed.tags.join(", ")}` : null,
+    `Audio: ${parsed.audio?.length ? parsed.audio.join(", ") : "no detectado"}`,
+    `Subtítulos: ${parsed.subs?.length ? parsed.subs.join(", ") : "no detectado"}`,
+  ].filter(Boolean);
+  return `He entendido esto del mensaje:\n\n${lines.join("\n")}\n\n¿Lo uso, o prefieres rellenarlo tú paso a paso? La coincidencia con TMDB la tendrás que confirmar tú igualmente.`;
 }
 
 export function newSession() {

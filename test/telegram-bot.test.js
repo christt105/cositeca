@@ -56,6 +56,17 @@ describe("formatCandidates", () => {
     assert.equal(candidates[1].url, "https://www.themoviedb.org/tv/1399");
   });
 
+  test("sorts a preferred-year match first, without dropping the rest", () => {
+    const results = [
+      { media_type: "movie", id: 1213076, title: "Fight Club", release_date: "2023-01-01" },
+      { media_type: "movie", id: 550, title: "El club de la lucha", release_date: "1999-10-15" },
+    ];
+    const candidates = formatCandidates(results, 5, "1999");
+    assert.equal(candidates[0].id, 550);
+    assert.equal(candidates[1].id, 1213076);
+    assert.equal(candidates.length, 2);
+  });
+
   test("caps at the given limit", () => {
     const results = Array.from({ length: 10 }, (_, i) => ({
       media_type: "movie",
