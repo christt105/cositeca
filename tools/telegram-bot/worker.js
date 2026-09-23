@@ -20,7 +20,21 @@ const SESSION_TTL = 1800;
 const ISSUE_MAP_TTL = 21600;
 
 const WELCOME_UNAUTHED = "Hola, soy el bot para añadir pelis/series a Cositeca. Escribe la contraseña para empezar.";
-const WELCOME_AUTHED = "Pégame el link del mensaje de Telegram con el archivo (usa 'Copiar enlace' en el mensaje).";
+const WELCOME_AUTHED = "Pégame el link del mensaje de Telegram con el archivo (usa 'Copiar enlace' en el mensaje), o reenvíame el mensaje del grupo directamente.";
+const HELP_TEXT = [
+  "Añado entradas a Cositeca sin tocar GitHub.",
+  "",
+  "1. Escribe la contraseña para entrar (solo hace falta una vez).",
+  "2. Pega el link del mensaje (botón 'Copiar enlace' del mensaje en el grupo), o reenvíame el mensaje directamente y te diré qué he entendido para que lo confirmes.",
+  "3. Busca el título en TMDB y toca el resultado correcto (nunca lo elijo yo solo).",
+  "4. Rellena calidad/audio/subtítulos/etiquetas/portada, o revísalos si venían de un reenvío.",
+  "5. Confirmas y te aviso en cuanto esté añadido de verdad.",
+  "",
+  "Comandos:",
+  "/start - Empezar de cero",
+  "/cancel - Cancelar lo que tengas a medias",
+  "/help - Ver esta ayuda",
+].join("\n");
 
 export default {
   async fetch(request, env) {
@@ -102,6 +116,10 @@ async function handleMessage(env, message) {
     if (!authed) return sendMessage(env, chatId, WELCOME_UNAUTHED);
     await setSession(env, chatId, newSession());
     return sendMessage(env, chatId, WELCOME_AUTHED);
+  }
+
+  if (text === "/help") {
+    return sendMessage(env, chatId, authed ? HELP_TEXT : `${HELP_TEXT}\n\nEscribe la contraseña para empezar.`);
   }
 
   if (!authed) {
