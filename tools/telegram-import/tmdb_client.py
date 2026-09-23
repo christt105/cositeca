@@ -39,6 +39,9 @@ class TmdbClient:
             params["year" if kind == "movie" else "first_air_date_year"] = year
         return self._get(f"/search/{kind}", params).get("results", [])
 
+    def details(self, kind, tmdb_id):
+        return self._get(f"/{kind}/{tmdb_id}", {})
+
 
 _client = None
 
@@ -55,6 +58,17 @@ def search_with_retry(kind, query, year=None, tries=3):
     for attempt in range(tries):
         try:
             return client.search(kind, query, year)
+        except Exception:
+            if attempt == tries - 1:
+                raise
+            time.sleep(1.5)
+
+
+def details_with_retry(kind, tmdb_id, tries=3):
+    client = get_client()
+    for attempt in range(tries):
+        try:
+            return client.details(kind, tmdb_id)
         except Exception:
             if attempt == tries - 1:
                 raise
