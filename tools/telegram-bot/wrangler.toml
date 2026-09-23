@@ -1,0 +1,10 @@
+name = "cositeca-telegram-bot"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+[observability]
+enabled = false
+
+[[kv_namespaces]]
+binding = "BOT_KV"
+id = "REPLACE_ME"

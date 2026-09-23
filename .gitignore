@@ -9,3 +9,5 @@ tools/telegram-import/__pycache__/
 *.session-journal
 tools/tmdb-proxy/.dev.vars
 tools/tmdb-proxy/.wrangler/
+tools/telegram-bot/.dev.vars
+tools/telegram-bot/.wrangler/
