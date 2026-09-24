@@ -107,9 +107,9 @@ describe("checkAntiSpam", () => {
     assert.equal(checkAntiSpam(daysAgo(400), 3), null);
   });
 
-  test("blocks accounts younger than 7 days", () => {
-    assert.equal(typeof checkAntiSpam(daysAgo(1), 0), "string");
-    assert.equal(typeof checkAntiSpam(daysAgo(6.9), 0), "string");
+  test("blocks accounts younger than 1 day", () => {
+    assert.equal(typeof checkAntiSpam(daysAgo(0), 0), "string");
+    assert.equal(typeof checkAntiSpam(daysAgo(0.9), 0), "string");
   });
 
   test("blocks more than 3 open entry issues", () => {
@@ -123,7 +123,7 @@ describe("checkAntiSpam", () => {
   });
 
   test("gives each rejection reason its own message", () => {
-    const tooNew = checkAntiSpam(daysAgo(1), 0);
+    const tooNew = checkAntiSpam(daysAgo(0.5), 0);
     const tooMany = checkAntiSpam(daysAgo(400), 4);
     const unknown = checkAntiSpam(undefined, 0);
     assert.equal(new Set([tooNew, tooMany, unknown]).size, 3);
