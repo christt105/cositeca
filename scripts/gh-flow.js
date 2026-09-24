@@ -67,8 +67,8 @@ export function checkAntiSpam(createdAt, openEntryIssueCount) {
     return "No se ha podido comprobar la antigüedad de tu cuenta. Vuelve a intentarlo más tarde.";
   }
   const accountAgeDays = (Date.now() - createdMs) / 86400000;
-  if (accountAgeDays < 7) {
-    return "Tu cuenta de GitHub es demasiado nueva (menos de 7 días) para enviar peticiones.";
+  if (accountAgeDays < 1) {
+    return "Tu cuenta de GitHub es demasiado nueva (menos de 1 día) para enviar peticiones.";
   }
   if (openEntryIssueCount > 3) {
     return "Tienes demasiadas peticiones abiertas (más de 3), espera a que se procesen antes de enviar otra.";
