@@ -47,6 +47,15 @@ synopses). Deployed on GitHub Pages.
   to the catalog at a time. A run queued that way carries the event payload
   from when it was queued, so the scripts first reread the issue with `gh`
   and do nothing if it is closed or has one of those labels by then.
+  GitHub keeps only one pending run per concurrency group, so a burst of
+  three writes cancels the middle one silently. `sweep.yml` recovers those:
+  hourly, on demand and whenever an `add-entry.yml` or `batch.yml` run ends
+  cancelled, it looks for open `entry`/`entry-batch` issues with no bot
+  comment and no hold label (every run that reaches an issue comments on
+  it), and only if there are any it reprocesses them one by one inside
+  `catalog-writes` with `scripts/sweep.js`. An edit to an issue the bot
+  already answered (for example one labelled `invalid`) is not recovered
+  if its run gets cancelled; editing it again retries.
 - `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
   `new_link` is empty and no other field is filled. An empty `new_link`
   next to any other field keeps the current link. The same rule applies to

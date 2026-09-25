@@ -1,0 +1,49 @@
+name: Sweep stranded requests
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_run:
+    workflows: [Add entry, Batch]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+  pull-requests: write
+
+jobs:
+  find:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'cancelled'
+    runs-on: ubuntu-latest
+    outputs:
+      stranded: ${{ steps.list.outputs.stranded }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - id: list
+        run: node scripts/sweep.js --list
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  process:
+    needs: find
+    if: needs.find.outputs.stranded != '0'
+    concurrency:
+      group: catalog-writes
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: node scripts/sweep.js
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
