@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createTmdbClient, isEntrypoint } from "./lib.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, reportValidationFailure, mergedMessage, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, skipReason, reportValidationFailure, mergedMessage, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 import { parseIssueBody } from "./issue-fields.js";
 import {
@@ -53,7 +53,13 @@ async function main() {
   }
 }
 
-async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
+export async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
+  const skip = skipReason(gh, issueNumber);
+  if (skip) {
+    console.log(`Issue #${issueNumber} is ${skip}, nothing to do.`);
+    return;
+  }
+
   const { qualities, groups, languages } = loadConfig(process.cwd());
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 

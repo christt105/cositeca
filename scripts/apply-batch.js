@@ -10,7 +10,7 @@ import {
   describeResult,
   collectExistingLinks,
 } from "./operations.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, reportValidationFailure, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, skipReason, reportValidationFailure, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 
 export const MAX_OPERATIONS = 50;
@@ -176,7 +176,13 @@ async function main() {
   }
 }
 
-async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
+export async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
+  const skip = skipReason(gh, issueNumber);
+  if (skip) {
+    console.log(`Issue #${issueNumber} is ${skip}, nothing to do.`);
+    return;
+  }
+
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 
   const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));

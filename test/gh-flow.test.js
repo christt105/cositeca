@@ -9,6 +9,7 @@ import {
   runUrl,
   mergedMessage,
   reportValidationFailure,
+  skipReason,
   VALIDATION_FAILED_LABEL,
   INTERNAL_ERROR_LABEL,
   INTERNAL_ERROR_MESSAGE,
@@ -265,5 +266,35 @@ describe("reportValidationFailure", () => {
       ["gh", "issue", "comment", "7", "--body", `La validación automática ha fallado en el PR generado (${PR_URL}), alguien lo revisará a mano.`],
     ]);
     assert.equal(VALIDATION_FAILED_LABEL, "validation-failed");
+  });
+});
+
+describe("skipReason", () => {
+  const view = (state, labels) => {
+    const calls = [];
+    const gh = (args) => {
+      calls.push(args);
+      return JSON.stringify({ state, labels: labels.map((name) => ({ name })) });
+    };
+    return { calls, gh };
+  };
+
+  test("reads the current state and labels of the issue", () => {
+    const { calls, gh } = view("OPEN", ["entry", "add"]);
+    assert.equal(skipReason(gh, "7"), null);
+    assert.deepEqual(calls, [["issue", "view", "7", "--json", "state,labels"]]);
+  });
+
+  test("lets an issue labelled invalid run again, since editing it is how it gets fixed", () => {
+    assert.equal(skipReason(view("OPEN", ["entry", "invalid"]).gh, "7"), null);
+  });
+
+  test("skips a closed issue", () => {
+    assert.equal(skipReason(view("CLOSED", ["entry", "add"]).gh, "7"), "closed");
+  });
+
+  test("skips an issue on hold", () => {
+    assert.equal(skipReason(view("OPEN", ["entry", "bug"]).gh, "7"), "labelled bug");
+    assert.equal(skipReason(view("OPEN", ["entry-batch", "validation-failed"]).gh, "7"), "labelled validation-failed");
   });
 });

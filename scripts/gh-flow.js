@@ -93,6 +93,18 @@ export function hasPendingChanges(git) {
   return git(["status", "--porcelain"]).trim() !== "";
 }
 
+/**
+ * Why a run should not touch the issue, judged from its current state rather
+ * than the event payload, or null if it should run. A run queued behind
+ * another one for the same issue may find it closed or on hold by then.
+ */
+export function skipReason(gh, issueNumber) {
+  const { state, labels } = JSON.parse(gh(["issue", "view", issueNumber, "--json", "state,labels"]));
+  if (state === "CLOSED") return "closed";
+  const held = labels.map((l) => l.name).find((name) => HOLD_LABELS.includes(name));
+  return held ? `labelled ${held}` : null;
+}
+
 /** Closes the issue unless it is already closed. */
 export function closeIssueIfOpen(gh, issueNumber) {
   if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
@@ -116,6 +128,7 @@ export function checkAntiSpam(createdAt, openEntryIssueCount) {
 }
 
 export const INTERNAL_ERROR_LABEL = "bug";
+export const HOLD_LABELS = [INTERNAL_ERROR_LABEL, VALIDATION_FAILED_LABEL];
 export const INTERNAL_ERROR_MESSAGE =
   "Error interno al procesar la petición. No es culpa tuya: alguien lo revisará a mano.";
 export const MERGED_FOLLOWUP_MESSAGE =

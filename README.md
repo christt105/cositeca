@@ -44,7 +44,9 @@ synopses). Deployed on GitHub Pages.
   issue whose bot PR failed `validate.yml`: the PR and its
   `bot/entry-<issue>` branch stay open for a maintainer to fix or close.
   They share the `catalog-writes` concurrency group, so only one run writes
-  to the catalog at a time.
+  to the catalog at a time. A run queued that way carries the event payload
+  from when it was queued, so the scripts first reread the issue with `gh`
+  and do nothing if it is closed or has one of those labels by then.
 - `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
   `new_link` is empty and no other field is filled. An empty `new_link`
   next to any other field keeps the current link. The same rule applies to
