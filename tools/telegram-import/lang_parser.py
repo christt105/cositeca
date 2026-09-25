@@ -84,7 +84,7 @@ def parse_languages(text):
         if lower.startswith("audio"):
             segment = line.split(":", 1)[1] if ":" in line else line[len("audio"):]
             audio += _resolve_vose(_extract(segment, _AUDIO_TABLE), is_subs_context=False)
-        elif lower.startswith("subtitulos") or lower.startswith("subt"):
+        elif lower.startswith(("subt", "subs")):
             segment = line.split(":", 1)[1] if ":" in line else line
             subs += _resolve_vose(_extract(segment, _SUBS_TABLE), is_subs_context=True)
 
