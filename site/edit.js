@@ -1,6 +1,8 @@
 import { tmdbUrl, issueUrl, listFieldValue, newLanguageError } from "./rules.js";
 import { esc, checked } from "./ui.js";
-import { loadMeta, hasProxy, renderPosterPicker, checkboxGroup, validateLink } from "./add.js";
+import { loadMeta, hasProxy } from "./tmdb.js";
+import { checkboxGroup, validateLink } from "./forms.js";
+import { renderPosterPicker } from "./poster-picker.js";
 import { openReidentify } from "./reid.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
 
@@ -59,7 +61,7 @@ function renderEditForm(row, item, link, meta) {
     const newLink = form.elements.link.value.trim();
     const newAudio = form.elements.new_audio_language.value.trim();
     const newSubs = form.elements.new_subs_language.value.trim();
-    const error = validateLink(newLink) || newLanguageError(newAudio) || newLanguageError(newSubs);
+    const error = validateLink(newLink, meta.groups) || newLanguageError(newAudio) || newLanguageError(newSubs);
     form.querySelector("[data-error]").textContent = error;
     if (error) return;
     const audio = checked(form, "audio");

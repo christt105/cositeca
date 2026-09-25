@@ -1,8 +1,8 @@
 import { TMDB_URL_RE, IMDB_ID_RE, tmdbUrl, issueUrl } from "./rules.js";
 import { esc, typeIcon, TYPE_LABELS } from "./ui.js";
-import { hasProxy, proxyGet, renderPosterPicker, seasonOptions, nameOf, yearOf } from "./add.js";
-
-const IMG = "https://image.tmdb.org/t/p";
+import { IMG, hasProxy, proxyGet } from "./tmdb.js";
+import { seasonOptions, nameOf, yearOf } from "./forms.js";
+import { renderPosterPicker } from "./poster-picker.js";
 
 function siteType(type) {
   return type === "tv" ? "series" : "movie";

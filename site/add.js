@@ -1,19 +1,11 @@
-import {
-  TMDB_PROXY_URL,
-  TMDB_URL_RE,
-  TMDB_ID_RE,
-  IMDB_ID_RE,
-  TELEGRAM_LINK_RE,
-  tmdbUrl,
-  issueUrl,
-  newLanguageError,
-  resolveProxyUrl,
-} from "./rules.js";
+import { TMDB_URL_RE, TMDB_ID_RE, IMDB_ID_RE, tmdbUrl, issueUrl, newLanguageError } from "./rules.js";
 import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked, debounce } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
+import { IMG, hasProxy, proxyGet, loadMeta } from "./tmdb.js";
+import { yearOf, nameOf, seasonOptions, checkboxGroup, validateLink } from "./forms.js";
+import { renderPosterPicker } from "./poster-picker.js";
 
 const view = document.getElementById("view-add");
-const IMG = "https://image.tmdb.org/t/p";
 const SEARCH_DEBOUNCE_MS = 300;
 
 let meta = null;
@@ -21,23 +13,6 @@ let ctx = { catalog: [], byKey: new Map() };
 let requestSeq = 0;
 let selected = null;
 let posterChoice = null;
-
-function proxyUrl() {
-  return resolveProxyUrl(localStorage.getItem("tmdbProxy"), TMDB_PROXY_URL);
-}
-
-export async function proxyGet(path) {
-  const res = await fetch(`${proxyUrl()}${path}`);
-  if (!res.ok) throw new Error(`proxy ${path} failed: ${res.status}`);
-  return res.json();
-}
-
-export async function loadMeta() {
-  if (meta) return meta;
-  const res = await fetch("meta.json", { cache: "no-cache" });
-  meta = await res.json();
-  return meta;
-}
 
 function catalogKey(type, id) {
   return `${type === "tv" ? "series" : "movie"}/${id}`;
@@ -47,22 +22,13 @@ function toSiteType(type) {
   return type === "tv" ? "series" : "movie";
 }
 
-export function yearOf(result) {
-  const date = result.release_date || result.first_air_date || "";
-  return date.slice(0, 4);
-}
-
-export function nameOf(result) {
-  return result.title || result.name || "";
-}
-
 const $ = byIdIn(view);
 
 export async function renderAdd(params, context) {
   ctx = context;
   selected = null;
   posterChoice = null;
-  if (!proxyUrl()) {
+  if (!hasProxy()) {
     view.innerHTML = `
       <a class="back" href="#/">&larr; Volver</a>
       <h2>Añadir una cosita</h2>
@@ -71,7 +37,7 @@ export async function renderAdd(params, context) {
     `;
     return;
   }
-  await loadMeta();
+  meta = await loadMeta();
   view.innerHTML = `
     <a class="back" href="#/">&larr; Volver</a>
     <h2>Añadir una cosita</h2>
@@ -227,45 +193,6 @@ function renderExisting(item) {
   `;
 }
 
-export function hasProxy() {
-  return Boolean(proxyUrl());
-}
-
-export async function renderPosterPicker(box, type, id, defaultPoster, onChoose) {
-  let data;
-  try {
-    data = await proxyGet(`/images?type=${type}&id=${id}`);
-  } catch {
-    return false;
-  }
-  const posters = (data.posters || [])
-    .filter((p) => [null, "es", "en"].includes(p.iso_639_1))
-    .sort((a, b) => b.vote_count - a.vote_count || b.vote_average - a.vote_average)
-    .slice(0, 12);
-  if (posters.length === 0) return false;
-  box.innerHTML = `
-    <div class="add__label">Portada (la primera es la que TMDB usa por defecto)</div>
-    <div class="posters">
-      <button type="button" class="poster is-active" data-poster="">
-        <img src="${esc(defaultPoster)}" alt="" loading="lazy"><span>Por defecto</span>
-      </button>
-      ${posters
-        .map((p) => `
-          <button type="button" class="poster" data-poster="${esc(`${IMG}/w342${p.file_path}`)}">
-            <img src="${esc(`${IMG}/w185${p.file_path}`)}" alt="" loading="lazy"><span>${esc(p.iso_639_1 ?? "sin texto")}</span>
-          </button>`)
-        .join("")}
-    </div>
-  `;
-  for (const btn of box.querySelectorAll(".poster")) {
-    btn.addEventListener("click", () => {
-      for (const b of box.querySelectorAll(".poster")) b.classList.toggle("is-active", b === btn);
-      onChoose(btn.dataset.poster || null);
-    });
-  }
-  return true;
-}
-
 async function loadPosters(type, id) {
   const box = $("add-posters");
   const current = selected;
@@ -274,24 +201,6 @@ async function loadPosters(type, id) {
     updateOutcome();
   });
   if (selected !== current) box.innerHTML = "";
-}
-
-export function seasonOptions(seasons) {
-  const numbers = new Set(seasons.map((s) => s.season_number));
-  const options = [];
-  if (!numbers.has(0)) options.push({ value: 0, label: "Especiales (0)" });
-  for (const s of [...seasons].sort((a, b) => a.season_number - b.season_number)) {
-    options.push({ value: s.season_number, label: `${s.name} (${s.season_number})` });
-  }
-  options.push({ value: "all", label: "Serie completa (all)" });
-  options.push({ value: "other", label: "Otra (escribir número)" });
-  return options;
-}
-
-export function checkboxGroup(name, values, checkedValues = []) {
-  return values
-    .map((v) => `<label class="check"><input type="checkbox" name="${name}" value="${esc(v)}"${checkedValues.includes(v) ? " checked" : ""}> ${esc(v)}</label>`)
-    .join("");
 }
 
 function renderForm() {
@@ -360,24 +269,9 @@ function renderForm() {
   updateOutcome();
 }
 
-export function validateLink(link) {
-  if (!link) return "";
-  if (link.includes("t.me/+") || link.includes("joinchat")) {
-    return "Los links de invitación no valen, tiene que ser el link de un mensaje.";
-  }
-  const match = TELEGRAM_LINK_RE.exec(link);
-  if (!match) {
-    return "Tiene que ser https://t.me/c/<grupo>/<mensaje>, copiado con Copiar enlace.";
-  }
-  if (!Object.prototype.hasOwnProperty.call(meta.groups, match[1])) {
-    return "Ese link no es de ninguno de los grupos de la Cositeca.";
-  }
-  return "";
-}
-
 function buildAddFields() {
   const link = $("add-link").value.trim();
-  const error = validateLink(link);
+  const error = validateLink(link, meta.groups);
   $("add-link-error").textContent = error;
   const newAudio = $("add-audio-other").value.trim();
   const newSubs = $("add-subs-other").value.trim();

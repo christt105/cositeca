@@ -26,6 +26,10 @@ synopses). Deployed on GitHub Pages.
 - `site/rules.js` holds the regexes and URL helpers shared by the page and
   the Node scripts (`scripts/lib.js` imports it), so `site/` needs no build
   step and the rules exist once.
+- `site/tmdb.js` (Worker proxy and the `meta.json` cache), `site/forms.js`
+  (pure form helpers) and `site/poster-picker.js` are shared by the add
+  view, the title page's edit panel (`edit.js`) and the reidentify panel
+  (`reid.js`), so none of them imports another view.
 - New entries, link fixes/deletions and poster changes come in through
   GitHub Issue forms (`add.yml`, `fix.yml`, `poster.yml`, `reidentify.yml`, told apart by
   their `add`/`fix`/`poster` label), processed by
