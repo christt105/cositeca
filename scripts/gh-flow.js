@@ -88,21 +88,32 @@ export const INTERNAL_ERROR_LABEL = "bug";
 export const INTERNAL_ERROR_MESSAGE =
   "Error interno al procesar la petición. No es culpa tuya: alguien lo revisará a mano.";
 
+/** Link to the current Actions run, or null outside Actions. */
+export function runUrl(env = process.env) {
+  const { GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID } = env;
+  if (!GITHUB_SERVER_URL || !GITHUB_REPOSITORY || !GITHUB_RUN_ID) return null;
+  return `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`;
+}
+
+function withRunLink(message, url) {
+  return url ? `${message}\n\nDetalles del run: ${url}` : message;
+}
+
 /**
  * Reports a failed run on its issue. A ValidationError is explained to the
  * author and labelled invalid. Any other error gets a generic internal-error
- * comment and label, deletes the bot branch if it was pushed and GitHub has
- * no PR for it,
- * and is rethrown so the job still fails. Each cleanup step is best effort.
+ * comment with the run link and label, deletes the bot branch if it was
+ * pushed and GitHub has no PR for it, and is rethrown so the job still
+ * fails. Each cleanup step is best effort.
  */
-export function reportFailure(err, { issueNumber, branch, pushed, prCreated, gh, git }) {
+export function reportFailure(err, { issueNumber, branch, pushed, prCreated, runUrl: url, gh, git }) {
   if (err instanceof ValidationError) {
     gh(["issue", "comment", issueNumber, "--body", err.message]);
     gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
     return;
   }
   const steps = [
-    () => gh(["issue", "comment", issueNumber, "--body", INTERNAL_ERROR_MESSAGE]),
+    () => gh(["issue", "comment", issueNumber, "--body", withRunLink(INTERNAL_ERROR_MESSAGE, url)]),
     () => gh(["issue", "edit", issueNumber, "--add-label", INTERNAL_ERROR_LABEL]),
   ];
   if (pushed && !prCreated) {

@@ -1,6 +1,14 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { openBotPr, findRunId, closeIssueIfOpen, hasPendingChanges } from "../scripts/gh-flow.js";
+import {
+  openBotPr,
+  findRunId,
+  closeIssueIfOpen,
+  hasPendingChanges,
+  reportFailure,
+  runUrl,
+  INTERNAL_ERROR_MESSAGE,
+} from "../scripts/gh-flow.js";
 
 const BRANCH = "bot/entry-7";
 const PR_URL = "https://github.com/christt105/cositeca/pull/42";
@@ -151,5 +159,38 @@ describe("hasPendingChanges", () => {
   test("is false for a clean working tree and true otherwise", () => {
     assert.equal(hasPendingChanges(() => ""), false);
     assert.equal(hasPendingChanges(() => " M movies/671.yaml\n"), true);
+  });
+});
+
+describe("runUrl", () => {
+  test("builds the Actions run link from the runner environment", () => {
+    assert.equal(
+      runUrl({ GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "christt105/cositeca", GITHUB_RUN_ID: "123" }),
+      "https://github.com/christt105/cositeca/actions/runs/123"
+    );
+  });
+
+  test("is null when any part is missing", () => {
+    assert.equal(runUrl({ GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "christt105/cositeca" }), null);
+    assert.equal(runUrl({}), null);
+  });
+});
+
+describe("reportFailure run link", () => {
+  const RUN = "https://github.com/christt105/cositeca/actions/runs/123";
+  const base = { issueNumber: "7", branch: BRANCH, pushed: false, prCreated: false };
+
+  test("appends the run link to the internal error comment", () => {
+    const r = runners();
+    assert.throws(() => reportFailure(new Error("boom"), { ...base, runUrl: RUN, gh: r.gh, git: r.git }));
+    assert.deepEqual(r.calls[0], [
+      "gh", "issue", "comment", "7", "--body", `${INTERNAL_ERROR_MESSAGE}\n\nDetalles del run: ${RUN}`,
+    ]);
+  });
+
+  test("keeps the plain message without a run link", () => {
+    const r = runners();
+    assert.throws(() => reportFailure(new Error("boom"), { ...base, runUrl: null, gh: r.gh, git: r.git }));
+    assert.deepEqual(r.calls[0], ["gh", "issue", "comment", "7", "--body", INTERNAL_ERROR_MESSAGE]);
   });
 });

@@ -10,7 +10,7 @@ import {
   describeResult,
   collectExistingLinks,
 } from "./operations.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 
 export const MAX_OPERATIONS = 50;
@@ -172,7 +172,7 @@ async function main() {
   try {
     await run({ issueNumber, issueAuthor, body, gh, git, progress });
   } catch (err) {
-    reportFailure(err, { issueNumber, ...progress, gh, git });
+    reportFailure(err, { issueNumber, ...progress, runUrl: runUrl(), gh, git });
   }
 }
 

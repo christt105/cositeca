@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createTmdbClient, isEntrypoint } from "./lib.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 import { parseIssueBody } from "./issue-fields.js";
 import {
@@ -48,7 +48,7 @@ async function main() {
   try {
     await run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress });
   } catch (err) {
-    reportFailure(err, { issueNumber, ...progress, gh, git });
+    reportFailure(err, { issueNumber, ...progress, runUrl: runUrl(), gh, git });
   }
 }
 
