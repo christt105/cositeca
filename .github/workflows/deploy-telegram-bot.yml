@@ -24,6 +24,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: tools/telegram-bot
           command: deploy
+          wranglerVersion: "4.134.0"
           secrets: |
             INTERNAL_TOKEN
         env:
