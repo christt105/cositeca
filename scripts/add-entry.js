@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createTmdbClient, isEntrypoint } from "./lib.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, skipReason, reportValidationFailure, mergedMessage, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 import { parseIssueBody } from "./issue-fields.js";
 import {
@@ -43,16 +43,23 @@ async function main() {
 
   const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
   const git = (args) => execFileSync("git", args, { encoding: "utf8" });
-  const progress = { branch: `bot/entry-${issueNumber}`, pushed: false, prCreated: false };
+  const progress = { branch: `bot/entry-${issueNumber}`, pushed: false, prCreated: false, merged: false };
 
   try {
-    await run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress });
+    const outcome = await run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress });
+    if (outcome?.deployPending) process.exitCode = 1;
   } catch (err) {
-    reportFailure(err, { issueNumber, ...progress, gh, git });
+    reportFailure(err, { issueNumber, ...progress, runUrl: runUrl(), gh, git });
   }
 }
 
-async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
+export async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
+  const skip = skipReason(gh, issueNumber);
+  if (skip) {
+    console.log(`Issue #${issueNumber} is ${skip}, nothing to do.`);
+    return;
+  }
+
   const { qualities, groups, languages } = loadConfig(process.cwd());
   const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 
@@ -127,7 +134,7 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
 
   const { subject, close } = describeResult(issueLabel, result);
 
-  const { validated } = await openBotPr({
+  const { prUrl, validated, deployed } = await openBotPr({
     subject,
     commitBody: `Closes #${issueNumber}`,
     prBody: `Closes #${issueNumber}`,
@@ -137,18 +144,13 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
     progress,
   });
   if (!validated) {
-    gh([
-      "issue", "comment", issueNumber, "--body",
-      "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
-    ]);
+    reportValidationFailure(gh, issueNumber, prUrl);
     return;
   }
 
-  gh([
-    "issue", "comment", issueNumber, "--body",
-    `${close} La web se actualiza en un par de minutos.`,
-  ]);
+  gh(["issue", "comment", issueNumber, "--body", mergedMessage(close, deployed)]);
   closeIssueIfOpen(gh, issueNumber);
+  return { deployPending: !deployed };
 }
 
 if (process.env.ISSUE_NUMBER && isEntrypoint(import.meta.url)) {

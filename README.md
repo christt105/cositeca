@@ -38,10 +38,24 @@ synopses). Deployed on GitHub Pages.
   title page and the add page open those forms with every field prefilled
   by query string, so users only review and submit. Both issue workflows
   (`add-entry.yml` and `batch.yml`) run on `opened` and `edited`, but only
-  for open issues without the `bug` label, so editing an applied (closed)
-  issue does nothing and an issue that failed with `invalid` can be fixed
-  by editing it. They share the `catalog-writes` concurrency group, so
-  only one run writes to the catalog at a time.
+  for open issues without the `bug` or `validation-failed` label, so
+  editing an applied (closed) issue does nothing and an issue that failed
+  with `invalid` can be fixed by editing it. `validation-failed` marks an
+  issue whose bot PR failed `validate.yml`: the PR and its
+  `bot/entry-<issue>` branch stay open for a maintainer to fix or close.
+  They share the `catalog-writes` concurrency group, so only one run writes
+  to the catalog at a time. A run queued that way carries the event payload
+  from when it was queued, so the scripts first reread the issue with `gh`
+  and do nothing if it is closed or has one of those labels by then.
+  GitHub keeps only one pending run per concurrency group, so a burst of
+  three writes cancels the middle one silently. `sweep.yml` recovers those:
+  hourly, on demand and whenever an `add-entry.yml` or `batch.yml` run ends
+  cancelled, it looks for open `entry`/`entry-batch` issues with no bot
+  comment and no hold label (every run that reaches an issue comments on
+  it), and only if there are any it reprocesses them one by one inside
+  `catalog-writes` with `scripts/sweep.js`. An edit to an issue the bot
+  already answered (for example one labelled `invalid`) is not recovered
+  if its run gets cancelled; editing it again retries.
 - `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
   `new_link` is empty and no other field is filled. An empty `new_link`
   next to any other field keeps the current link. The same rule applies to

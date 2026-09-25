@@ -18,8 +18,10 @@ export async function findRunId(gh, workflow, branch, { wait = sleep } = {}) {
  * Commits the working tree as the bot on `progress.branch`, pushes it, runs
  * validate.yml on it, opens a PR against main and waits for the validation.
  * With `autoMerge`, a validated PR is squash-merged and deploy.yml is
- * dispatched. Sets `progress.pushed` and `progress.prCreated` as each step
- * succeeds. Returns the PR url and number and whether validation passed.
+ * dispatched. Sets `progress.pushed`, `progress.prCreated` and
+ * `progress.merged` as each step succeeds. Returns the PR url and number,
+ * whether validation passed and whether the deploy was dispatched. A failed
+ * dispatch is logged instead of thrown, since the PR is already merged.
  */
 export async function openBotPr({ subject, commitBody, prBody, autoMerge, gh, git, progress, wait = sleep }) {
   const { branch } = progress;
@@ -44,14 +46,43 @@ export async function openBotPr({ subject, commitBody, prBody, autoMerge, gh, gi
   try {
     gh(["run", "watch", String(runId), "--exit-status"]);
   } catch {
-    return { prUrl, prNumber, validated: false };
+    return { prUrl, prNumber, validated: false, deployed: false };
   }
 
-  if (autoMerge) {
-    gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
+  if (!autoMerge) return { prUrl, prNumber, validated: true, deployed: false };
+
+  gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
+  progress.merged = true;
+  try {
     gh(["workflow", "run", "deploy.yml"]);
+  } catch (err) {
+    console.error(`::warning::deploy.yml dispatch failed: ${err.message}`);
+    return { prUrl, prNumber, validated: true, deployed: false };
   }
-  return { prUrl, prNumber, validated: true };
+  return { prUrl, prNumber, validated: true, deployed: true };
+}
+
+export const DEPLOYED_SUFFIX = "La web se actualiza en un par de minutos.";
+export const DEPLOY_PENDING_SUFFIX =
+  "No se ha podido lanzar la actualización de la web, así que tardará más en aparecer: alguien lo revisará.";
+
+/** Success comment for a merged entry, depending on whether the deploy was dispatched. */
+export function mergedMessage(close, deployed) {
+  return `${close} ${deployed ? DEPLOYED_SUFFIX : DEPLOY_PENDING_SUFFIX}`;
+}
+
+export const VALIDATION_FAILED_LABEL = "validation-failed";
+
+/**
+ * Reports a bot PR whose validation failed: labels the issue so the issue
+ * workflows leave it alone, and tells the author.
+ */
+export function reportValidationFailure(gh, issueNumber, prUrl) {
+  gh(["issue", "edit", issueNumber, "--add-label", VALIDATION_FAILED_LABEL]);
+  gh([
+    "issue", "comment", issueNumber, "--body",
+    `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
+  ]);
 }
 
 export const NO_CHANGES_MESSAGE =
@@ -60,6 +91,18 @@ export const NO_CHANGES_MESSAGE =
 /** Whether the working tree has anything for openBotPr to commit. */
 export function hasPendingChanges(git) {
   return git(["status", "--porcelain"]).trim() !== "";
+}
+
+/**
+ * Why a run should not touch the issue, judged from its current state rather
+ * than the event payload, or null if it should run. A run queued behind
+ * another one for the same issue may find it closed or on hold by then.
+ */
+export function skipReason(gh, issueNumber) {
+  const { state, labels } = JSON.parse(gh(["issue", "view", issueNumber, "--json", "state,labels"]));
+  if (state === "CLOSED") return "closed";
+  const held = labels.map((l) => l.name).find((name) => HOLD_LABELS.includes(name));
+  return held ? `labelled ${held}` : null;
 }
 
 /** Closes the issue unless it is already closed. */
@@ -85,26 +128,47 @@ export function checkAntiSpam(createdAt, openEntryIssueCount) {
 }
 
 export const INTERNAL_ERROR_LABEL = "bug";
+export const HOLD_LABELS = [INTERNAL_ERROR_LABEL, VALIDATION_FAILED_LABEL];
 export const INTERNAL_ERROR_MESSAGE =
   "Error interno al procesar la petición. No es culpa tuya: alguien lo revisará a mano.";
+export const MERGED_FOLLOWUP_MESSAGE =
+  "Tu petición ya está aplicada en el catálogo, pero ha fallado un paso posterior del bot. No tienes que hacer nada: alguien lo revisará.";
+
+/** Link to the current Actions run, or null outside Actions. */
+export function runUrl(env = process.env) {
+  const { GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID } = env;
+  if (!GITHUB_SERVER_URL || !GITHUB_REPOSITORY || !GITHUB_RUN_ID) return null;
+  return `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`;
+}
+
+function withRunLink(message, url) {
+  return url ? `${message}\n\nDetalles del run: ${url}` : message;
+}
 
 /**
  * Reports a failed run on its issue. A ValidationError is explained to the
- * author and labelled invalid. Any other error gets a generic internal-error
- * comment and label, deletes the bot branch if it was pushed and GitHub has
- * no PR for it,
- * and is rethrown so the job still fails. Each cleanup step is best effort.
+ * author and labelled invalid. A failure after the bot PR was merged only
+ * gets a reassuring comment with the run link and closes the issue. Any
+ * other error gets a generic internal-error comment with the run link and
+ * label, and deletes the bot branch if it was pushed and GitHub has no PR
+ * for it. Non-validation errors are rethrown so the job still fails. Each
+ * cleanup step is best effort.
  */
-export function reportFailure(err, { issueNumber, branch, pushed, prCreated, gh, git }) {
+export function reportFailure(err, { issueNumber, branch, pushed, prCreated, merged, runUrl: url, gh, git }) {
   if (err instanceof ValidationError) {
     gh(["issue", "comment", issueNumber, "--body", err.message]);
     gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
     return;
   }
-  const steps = [
-    () => gh(["issue", "comment", issueNumber, "--body", INTERNAL_ERROR_MESSAGE]),
-    () => gh(["issue", "edit", issueNumber, "--add-label", INTERNAL_ERROR_LABEL]),
-  ];
+  const steps = merged
+    ? [
+        () => gh(["issue", "comment", issueNumber, "--body", withRunLink(MERGED_FOLLOWUP_MESSAGE, url)]),
+        () => closeIssueIfOpen(gh, issueNumber),
+      ]
+    : [
+        () => gh(["issue", "comment", issueNumber, "--body", withRunLink(INTERNAL_ERROR_MESSAGE, url)]),
+        () => gh(["issue", "edit", issueNumber, "--add-label", INTERNAL_ERROR_LABEL]),
+      ];
   if (pushed && !prCreated) {
     steps.push(() => {
       const prs = gh(["pr", "list", "--head", branch, "--state", "all", "--json", "number", "--jq", "length"]);

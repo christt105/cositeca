@@ -1,6 +1,22 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { openBotPr, findRunId, closeIssueIfOpen, hasPendingChanges } from "../scripts/gh-flow.js";
+import {
+  openBotPr,
+  findRunId,
+  closeIssueIfOpen,
+  hasPendingChanges,
+  reportFailure,
+  runUrl,
+  mergedMessage,
+  reportValidationFailure,
+  skipReason,
+  VALIDATION_FAILED_LABEL,
+  INTERNAL_ERROR_LABEL,
+  INTERNAL_ERROR_MESSAGE,
+  MERGED_FOLLOWUP_MESSAGE,
+  DEPLOYED_SUFFIX,
+  DEPLOY_PENDING_SUFFIX,
+} from "../scripts/gh-flow.js";
 
 const BRANCH = "bot/entry-7";
 const PR_URL = "https://github.com/christt105/cositeca/pull/42";
@@ -33,7 +49,7 @@ function flowArgs(r, overrides = {}) {
     autoMerge: true,
     gh: r.gh,
     git: r.git,
-    progress: { branch: BRANCH, pushed: false, prCreated: false },
+    progress: { branch: BRANCH, pushed: false, prCreated: false, merged: false },
     wait: noWait,
     ...overrides,
   };
@@ -55,7 +71,7 @@ describe("openBotPr", () => {
     const r = runners();
     const args = flowArgs(r);
     const result = await openBotPr(args);
-    assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: true });
+    assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: true, deployed: true });
     assert.deepEqual(r.calls, [
       ...COMMON_PREFIX("Closes #7"),
       ["gh", "pr", "create", "--base", "main", "--head", BRANCH, "--title", "feat: add Fight Club 1080p", "--body", "Closes #7"],
@@ -65,6 +81,36 @@ describe("openBotPr", () => {
     ]);
     assert.equal(args.progress.pushed, true);
     assert.equal(args.progress.prCreated, true);
+    assert.equal(args.progress.merged, true);
+  });
+
+  test("a failed deploy dispatch after the merge is reported, not thrown", async () => {
+    const r = runners();
+    const gh = (args) => {
+      if (args[0] === "workflow" && args[2] === "deploy.yml") throw new Error("HTTP 500");
+      return r.gh(args);
+    };
+    const args = flowArgs(r, { gh });
+    const originalConsoleError = console.error;
+    console.error = () => {};
+    try {
+      const result = await openBotPr(args);
+      assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: true, deployed: false });
+    } finally {
+      console.error = originalConsoleError;
+    }
+    assert.equal(args.progress.merged, true);
+  });
+
+  test("a failed merge leaves merged false", async () => {
+    const r = runners();
+    const gh = (args) => {
+      if (args[0] === "pr" && args[1] === "merge") throw new Error("merge conflict");
+      return r.gh(args);
+    };
+    const args = flowArgs(r, { gh });
+    await assert.rejects(openBotPr(args), /merge conflict/);
+    assert.equal(args.progress.merged, false);
   });
 
   test("manual-merge variant stops after the validation run", async () => {
@@ -74,7 +120,7 @@ describe("openBotPr", () => {
       prBody: "Ref #7",
       autoMerge: false,
     }));
-    assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: true });
+    assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: true, deployed: false });
     assert.deepEqual(r.calls, [
       ...COMMON_PREFIX("2 operation(s) applied, ref #7"),
       ["gh", "pr", "create", "--base", "main", "--head", BRANCH, "--title", "feat: add Fight Club 1080p", "--body", "Ref #7"],
@@ -86,7 +132,7 @@ describe("openBotPr", () => {
     const r = runners({ watchFails: true });
     const args = flowArgs(r);
     const result = await openBotPr(args);
-    assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: false });
+    assert.deepEqual(result, { prUrl: PR_URL, prNumber: "42", validated: false, deployed: false });
     assert.deepEqual(r.calls.at(-1), ["gh", "run", "watch", "99", "--exit-status"]);
     assert.equal(r.calls.some((c) => c[1] === "pr" && c[2] === "merge"), false);
     assert.equal(args.progress.prCreated, true);
@@ -151,5 +197,104 @@ describe("hasPendingChanges", () => {
   test("is false for a clean working tree and true otherwise", () => {
     assert.equal(hasPendingChanges(() => ""), false);
     assert.equal(hasPendingChanges(() => " M movies/671.yaml\n"), true);
+  });
+});
+
+describe("runUrl", () => {
+  test("builds the Actions run link from the runner environment", () => {
+    assert.equal(
+      runUrl({ GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "christt105/cositeca", GITHUB_RUN_ID: "123" }),
+      "https://github.com/christt105/cositeca/actions/runs/123"
+    );
+  });
+
+  test("is null when any part is missing", () => {
+    assert.equal(runUrl({ GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "christt105/cositeca" }), null);
+    assert.equal(runUrl({}), null);
+  });
+});
+
+describe("reportFailure run link", () => {
+  const RUN = "https://github.com/christt105/cositeca/actions/runs/123";
+  const base = { issueNumber: "7", branch: BRANCH, pushed: false, prCreated: false };
+
+  test("appends the run link to the internal error comment", () => {
+    const r = runners();
+    assert.throws(() => reportFailure(new Error("boom"), { ...base, runUrl: RUN, gh: r.gh, git: r.git }));
+    assert.deepEqual(r.calls[0], [
+      "gh", "issue", "comment", "7", "--body", `${INTERNAL_ERROR_MESSAGE}\n\nDetalles del run: ${RUN}`,
+    ]);
+  });
+
+  test("keeps the plain message without a run link", () => {
+    const r = runners();
+    assert.throws(() => reportFailure(new Error("boom"), { ...base, runUrl: null, gh: r.gh, git: r.git }));
+    assert.deepEqual(r.calls[0], ["gh", "issue", "comment", "7", "--body", INTERNAL_ERROR_MESSAGE]);
+  });
+});
+
+describe("mergedMessage", () => {
+  test("promises the site update only when the deploy was dispatched", () => {
+    assert.equal(mergedMessage("Añadido.", true), `Añadido. ${DEPLOYED_SUFFIX}`);
+    assert.equal(mergedMessage("Añadido.", false), `Añadido. ${DEPLOY_PENDING_SUFFIX}`);
+  });
+});
+
+describe("reportFailure after the merge", () => {
+  const RUN = "https://github.com/christt105/cositeca/actions/runs/123";
+  const base = { issueNumber: "7", branch: BRANCH, pushed: true, prCreated: true, merged: true, runUrl: RUN };
+
+  test("reassures the author, closes the issue, skips the bug label and still rethrows", () => {
+    const r = runners();
+    const err = new Error("gh issue comment failed");
+    assert.throws(() => reportFailure(err, { ...base, gh: r.gh, git: r.git }), (thrown) => thrown === err);
+    assert.deepEqual(r.calls, [
+      ["gh", "issue", "comment", "7", "--body", `${MERGED_FOLLOWUP_MESSAGE}\n\nDetalles del run: ${RUN}`],
+      ["gh", "issue", "view", "7", "--json", "state", "--jq", ".state"],
+      ["gh", "issue", "close", "7"],
+    ]);
+    assert.equal(r.calls.some((c) => c.includes(INTERNAL_ERROR_LABEL) || c.includes(INTERNAL_ERROR_MESSAGE)), false);
+  });
+});
+
+describe("reportValidationFailure", () => {
+  test("labels the issue so the workflows skip it, then points the author at the PR", () => {
+    const r = runners();
+    reportValidationFailure(r.gh, "7", PR_URL);
+    assert.deepEqual(r.calls, [
+      ["gh", "issue", "edit", "7", "--add-label", VALIDATION_FAILED_LABEL],
+      ["gh", "issue", "comment", "7", "--body", `La validación automática ha fallado en el PR generado (${PR_URL}), alguien lo revisará a mano.`],
+    ]);
+    assert.equal(VALIDATION_FAILED_LABEL, "validation-failed");
+  });
+});
+
+describe("skipReason", () => {
+  const view = (state, labels) => {
+    const calls = [];
+    const gh = (args) => {
+      calls.push(args);
+      return JSON.stringify({ state, labels: labels.map((name) => ({ name })) });
+    };
+    return { calls, gh };
+  };
+
+  test("reads the current state and labels of the issue", () => {
+    const { calls, gh } = view("OPEN", ["entry", "add"]);
+    assert.equal(skipReason(gh, "7"), null);
+    assert.deepEqual(calls, [["issue", "view", "7", "--json", "state,labels"]]);
+  });
+
+  test("lets an issue labelled invalid run again, since editing it is how it gets fixed", () => {
+    assert.equal(skipReason(view("OPEN", ["entry", "invalid"]).gh, "7"), null);
+  });
+
+  test("skips a closed issue", () => {
+    assert.equal(skipReason(view("CLOSED", ["entry", "add"]).gh, "7"), "closed");
+  });
+
+  test("skips an issue on hold", () => {
+    assert.equal(skipReason(view("OPEN", ["entry", "bug"]).gh, "7"), "labelled bug");
+    assert.equal(skipReason(view("OPEN", ["entry-batch", "validation-failed"]).gh, "7"), "labelled validation-failed");
   });
 });
