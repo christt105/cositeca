@@ -257,12 +257,12 @@ function buildOps() {
 }
 
 function buildCorrectionsCsv() {
-  const rows = [["kind", "old_tmdb_id", "link", "new_kind", "new_tmdb_id"]];
+  const rows = [["kind", "old_tmdb_id", "link", "new_kind", "new_tmdb_id", "season"]];
   for (const row of SUSPECTS) {
     const cat = category(row);
     if (!cat.correction || isApplied(cat.loc)) continue;
     const src = cat.loc.source;
-    rows.push([src.kind, src.tmdb, row.link, cat.saved.new_kind || row.kind, cat.saved.new_tmdb_id]);
+    rows.push([src.kind, src.tmdb, row.link, cat.saved.new_kind || row.kind, cat.saved.new_tmdb_id, cat.saved.season]);
   }
   return rows.map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")).join(NL);
 }

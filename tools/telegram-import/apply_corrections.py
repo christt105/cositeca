@@ -32,6 +32,11 @@ def adapt_for_kind(entry, new_kind, row):
                     f"pero no tiene 'season'. Añade una columna 'season' a la fila "
                     f"de corrections.csv (entero o 'all') y vuelve a correr."
                 )
+            if season != "all" and not season.isdigit():
+                raise SystemExit(
+                    f"fatal: temporada '{season}' no válida para {row['link']}; "
+                    f"usa un entero o 'all'."
+                )
             entry["season"] = int(season) if season != "all" else season
     elif new_kind == "movies":
         entry.pop("season", None)
