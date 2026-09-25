@@ -1,24 +1,14 @@
-import re
 import time
 import urllib.parse
 import urllib.request
 import json
-from pathlib import Path
 
-ENV_PATH = Path("/Server/70-79_Media/77_cinegram/.env")
-
-
-def _read_env(key):
-    text = ENV_PATH.read_text()
-    match = re.search(rf"^{key}=(.*)$", text, re.MULTILINE)
-    if not match:
-        raise RuntimeError(f"{key} not found in {ENV_PATH}")
-    return match.group(1).strip()
+from env import read_env
 
 
 class TmdbClient:
     def __init__(self):
-        self.api_key = _read_env("TMDB_API_KEY")
+        self.api_key = read_env("TMDB_API_KEY")
         self.use_bearer = self.api_key.startswith("eyJ")
 
     def _get(self, path, params):
