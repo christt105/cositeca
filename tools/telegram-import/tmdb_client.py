@@ -1,24 +1,14 @@
-import re
 import time
 import urllib.parse
 import urllib.request
 import json
-from pathlib import Path
 
-ENV_PATH = Path("/Server/70-79_Media/77_cinegram/.env")
-
-
-def _read_env(key):
-    text = ENV_PATH.read_text()
-    match = re.search(rf"^{key}=(.*)$", text, re.MULTILINE)
-    if not match:
-        raise RuntimeError(f"{key} not found in {ENV_PATH}")
-    return match.group(1).strip()
+from env import read_env
 
 
 class TmdbClient:
     def __init__(self):
-        self.api_key = _read_env("TMDB_API_KEY")
+        self.api_key = read_env("TMDB_API_KEY")
         self.use_bearer = self.api_key.startswith("eyJ")
 
     def _get(self, path, params):
@@ -39,6 +29,9 @@ class TmdbClient:
             params["year" if kind == "movie" else "first_air_date_year"] = year
         return self._get(f"/search/{kind}", params).get("results", [])
 
+    def details(self, kind, tmdb_id):
+        return self._get(f"/{kind}/{tmdb_id}", {})
+
 
 _client = None
 
@@ -55,6 +48,17 @@ def search_with_retry(kind, query, year=None, tries=3):
     for attempt in range(tries):
         try:
             return client.search(kind, query, year)
+        except Exception:
+            if attempt == tries - 1:
+                raise
+            time.sleep(1.5)
+
+
+def details_with_retry(kind, tmdb_id, tries=3):
+    client = get_client()
+    for attempt in range(tries):
+        try:
+            return client.details(kind, tmdb_id)
         except Exception:
             if attempt == tries - 1:
                 raise

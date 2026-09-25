@@ -50,6 +50,10 @@ def build_entry(row, source):
         season = row["season"]
         entry["season"] = int(season) if season.lstrip("-").isdigit() else season
     entry["quality"] = row["quality"]
+    if row.get("audio"):
+        entry["audio"] = [a for a in row["audio"].split(",") if a]
+    if row.get("subs"):
+        entry["subs"] = [s for s in row["subs"].split(",") if s]
     if row.get("tags"):
         entry["tags"] = [t for t in row["tags"].split(",") if t]
     entry["link"] = f"https://t.me/c/{GROUP_ID}/{source['topic']}/{row['id']}"
@@ -69,7 +73,10 @@ def baseline(kind, tmdb_id):
 
 
 def dump(path, data):
-    key_order = {"title": 0, "links": 1, "season": 0, "quality": 1, "tags": 2, "link": 3}
+    key_order = {
+        "title": 0, "links": 1,
+        "season": 0, "quality": 1, "audio": 2, "subs": 3, "tags": 4, "link": 5,
+    }
 
     def sort_keys(d):
         return dict(sorted(d.items(), key=lambda kv: key_order.get(kv[0], 99)))
