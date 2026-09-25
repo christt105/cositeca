@@ -213,16 +213,20 @@ describe("processAdd", () => {
     assert.deepEqual(ctx.tmdbClient.calls, []);
   });
 
-  test("rejects a series entry without season and a movie entry with one", async () => {
+  test("rejects a series entry without season", async () => {
     const { ctx } = deps();
     await assert.rejects(
       () => processAdd({ tmdb: TV_URL, quality: "1080p", link: link(13) }, ctx),
       { message: "season is required for series entries" }
     );
-    await assert.rejects(
-      () => processAdd({ tmdb: MOVIE_URL, quality: "1080p", season: "1", link: link(14) }, ctx),
-      { message: "season is not allowed for movie entries" }
-    );
+  });
+
+  test("ignores the season of a movie entry", async () => {
+    const { ctx } = deps();
+    for (const season of ["0", "1"]) {
+      const result = await processAdd({ tmdb: MOVIE_URL, quality: "1080p", season, link: link(14) }, ctx);
+      assert.deepEqual(load(result.content).links[0], { quality: "1080p", link: link(14) });
+    }
   });
 
   test("rejects a malformed season", async () => {

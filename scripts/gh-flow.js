@@ -54,6 +54,14 @@ export async function openBotPr({ subject, commitBody, prBody, autoMerge, gh, gi
   return { prUrl, prNumber, validated: true };
 }
 
+export const NO_CHANGES_MESSAGE =
+  "La petición no cambia nada: el catálogo ya estaba así. No se ha creado ningún PR.";
+
+/** Whether the working tree has anything for openBotPr to commit. */
+export function hasPendingChanges(git) {
+  return git(["status", "--porcelain"]).trim() !== "";
+}
+
 /** Closes the issue unless it is already closed. */
 export function closeIssueIfOpen(gh, issueNumber) {
   if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
