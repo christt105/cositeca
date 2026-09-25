@@ -211,13 +211,14 @@ Local development (no account needed): put `TMDB_API_KEY=...` in
 Deploy: every push to `main` that touches `tools/tmdb-proxy/**` runs
 `.github/workflows/deploy-tmdb-proxy.yml` (tests, then `wrangler deploy`
 with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository
-secrets); it can also be started by hand from the Actions tab. `wrangler
-deploy` keeps the Worker's existing secrets, which are managed only by hand
-(from `tools/tmdb-proxy/`, with the same two variables in the environment):
+secrets); it can also be started by hand from the Actions tab. Both deploy
+workflows upload `INTERNAL_TOKEN` from the repository secret of the same name
+before deploying, so the two Workers always share one value. `wrangler
+deploy` keeps the Worker's other secrets, which are managed by hand (from
+`tools/tmdb-proxy/`, with the same two variables in the environment):
 
 ```sh
 npx wrangler secret put TMDB_API_KEY
-npx wrangler secret put INTERNAL_TOKEN   # same value as the Telegram bot's
 ```
 
 Roll back with `git revert` of the offending commit (which redeploys) or

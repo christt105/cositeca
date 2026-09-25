@@ -24,3 +24,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: tools/telegram-bot
           command: deploy
+          secrets: |
+            INTERNAL_TOKEN
+        env:
+          INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
