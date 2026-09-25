@@ -249,12 +249,10 @@ describe("processReidentify", () => {
     });
   });
 
-  test("rejects a season when the target is a movie", async () => {
+  test("ignores a season when the target is a movie", async () => {
     const { ctx } = deps(sourceMovie);
-    await assert.rejects(
-      () => processReidentify({ tmdb: MOVIE_URL, new_tmdb: OTHER_MOVIE_URL, season: "1" }, ctx),
-      { message: "season is not allowed when moving to a movie" }
-    );
+    const result = await processReidentify({ tmdb: MOVIE_URL, new_tmdb: OTHER_MOVIE_URL, season: "1" }, ctx);
+    assert.ok(load(result.files[0].content).links.every((l) => l.season === undefined));
   });
 
   test("rejects moving a movie to a series without a season", async () => {

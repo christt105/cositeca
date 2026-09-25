@@ -42,10 +42,11 @@ function isKnownLink(existingLinks, link) {
 
 export async function processAdd(fields, { qualities, groups, languages, tmdbClient, existingLinks, fileExists, readFile }) {
   requireTextFields(fields);
-  const season = parseSeasonField(fields.season);
-  const descriptor = parseTmdbInput(fields.tmdb, { hasSeason: season !== undefined });
+  const requestedSeason = parseSeasonField(fields.season);
+  const descriptor = parseTmdbInput(fields.tmdb, { hasSeason: requestedSeason !== undefined });
   const target = await resolveTmdbTarget(descriptor, tmdbClient);
   const kind = target.type === "movie" ? "movie" : "series";
+  const season = kind === "movie" ? undefined : requestedSeason;
   const dir = target.type === "movie" ? "movies" : "series";
 
   if (isKnownLink(existingLinks, fields.link)) {
@@ -150,7 +151,7 @@ export function processFix(fields, { qualities, groups, languages, existingLinks
       updated.quality = fields.quality;
     }
     const season = parseSeasonField(fields.season);
-    if (season !== undefined) {
+    if (season !== undefined && type !== "movie") {
       updated.season = season;
     }
     for (const key of ["audio", "subs", "tags"]) {
@@ -228,9 +229,6 @@ export async function processReidentify(fields, { qualities, groups, languages, 
   const targetPath = `${target.type === "movie" ? "movies" : "series"}/${target.id}.yaml`;
   if (targetPath === sourcePath) {
     throw new ValidationError("the new title is the same as the current one");
-  }
-  if (kind === "movie" && season !== undefined) {
-    throw new ValidationError("season is not allowed when moving to a movie");
   }
 
   const sourceData = load(readFile(sourcePath));

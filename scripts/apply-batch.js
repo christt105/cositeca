@@ -10,7 +10,7 @@ import {
   describeResult,
   collectExistingLinks,
 } from "./operations.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 
 export const MAX_OPERATIONS = 50;
@@ -215,6 +215,11 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
   fs.flush();
   if (result.languagesChanged) {
     saveLanguages(process.cwd(), languages);
+  }
+  if (!hasPendingChanges(git)) {
+    gh(["issue", "comment", issueNumber, "--body", NO_CHANGES_MESSAGE]);
+    closeIssueIfOpen(gh, issueNumber);
+    return;
   }
 
   const subject = `feat: batch changes (#${issueNumber})`;

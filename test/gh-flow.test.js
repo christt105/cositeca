@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { openBotPr, findRunId, closeIssueIfOpen } from "../scripts/gh-flow.js";
+import { openBotPr, findRunId, closeIssueIfOpen, hasPendingChanges } from "../scripts/gh-flow.js";
 
 const BRANCH = "bot/entry-7";
 const PR_URL = "https://github.com/christt105/cositeca/pull/42";
@@ -144,5 +144,12 @@ describe("closeIssueIfOpen", () => {
     const r = runners({ issueState: "CLOSED" });
     closeIssueIfOpen(r.gh, "7");
     assert.deepEqual(r.calls, [["gh", "issue", "view", "7", "--json", "state", "--jq", ".state"]]);
+  });
+});
+
+describe("hasPendingChanges", () => {
+  test("is false for a clean working tree and true otherwise", () => {
+    assert.equal(hasPendingChanges(() => ""), false);
+    assert.equal(hasPendingChanges(() => " M movies/671.yaml\n"), true);
   });
 });

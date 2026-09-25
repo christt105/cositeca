@@ -77,6 +77,12 @@ describe("processFix: updating a link", () => {
     });
   });
 
+  test("ignores the season of a movie entry", () => {
+    const { ctx } = deps();
+    const result = processFix({ old_link: link(1), new_link: link(1), season: "0" }, ctx);
+    assert.equal(load(result.content).links[0].season, undefined);
+  });
+
   test("changes the quality, the season, the audio and the subs", () => {
     const { ctx } = deps();
     const result = processFix(
