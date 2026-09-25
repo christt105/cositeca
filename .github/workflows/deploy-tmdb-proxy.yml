@@ -1,0 +1,33 @@
+name: Deploy TMDB proxy worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/tmdb-proxy/**"
+      - ".github/workflows/deploy-tmdb-proxy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-tmdb-proxy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm test
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: tools/tmdb-proxy
+          command: deploy
