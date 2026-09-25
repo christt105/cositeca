@@ -158,6 +158,69 @@ describe("origin checks", () => {
   });
 });
 
+describe("internal token", () => {
+  const TOKEN = "s3cret-internal-token";
+
+  test("a request with the matching token is served without Origin or Referer", async () => {
+    const limiter = makeLimiter();
+    const res = await call("/search?q=fight%20club", {
+      headers: { "X-Internal-Token": TOKEN },
+      env: makeEnv({ INTERNAL_TOKEN: TOKEN, RATE_LIMITER: limiter }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Access-Control-Allow-Origin"), null);
+    assert.equal(upstreamCalls.length, 1);
+    assert.deepEqual(limiter.calls, [{ key: "internal" }]);
+  });
+
+  test("internal requests share one rate-limit key even with a client IP", async () => {
+    const limiter = makeLimiter();
+    await call("/movie/550", {
+      headers: { "X-Internal-Token": TOKEN, "CF-Connecting-IP": "203.0.113.7" },
+      env: makeEnv({ INTERNAL_TOKEN: TOKEN, RATE_LIMITER: limiter }),
+    });
+    assert.deepEqual(limiter.calls, [{ key: "internal" }]);
+  });
+
+  test("a wrong, truncated or extended token is rejected", async () => {
+    for (const token of ["wrong", TOKEN.slice(0, -1), `${TOKEN}x`, TOKEN.toUpperCase()]) {
+      const res = await call("/movie/550", {
+        headers: { "X-Internal-Token": token },
+        env: makeEnv({ INTERNAL_TOKEN: TOKEN }),
+      });
+      assert.equal(res.status, 403, token);
+    }
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test("without INTERNAL_TOKEN configured no header value bypasses the origin check", async () => {
+    for (const env of [makeEnv(), makeEnv({ INTERNAL_TOKEN: "" })]) {
+      for (const token of ["", "undefined", "anything"]) {
+        const res = await call("/movie/550", { headers: { "X-Internal-Token": token }, env });
+        assert.equal(res.status, 403, JSON.stringify(token));
+      }
+    }
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  test("browser requests keep working when INTERNAL_TOKEN is configured", async () => {
+    const res = await call("/movie/550", {
+      headers: { Origin: PAGES },
+      env: makeEnv({ INTERNAL_TOKEN: TOKEN }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Access-Control-Allow-Origin"), PAGES);
+  });
+
+  test("an internal request still fails closed without the rate limiter", async () => {
+    const env = makeEnv({ INTERNAL_TOKEN: TOKEN });
+    delete env.RATE_LIMITER;
+    const res = await call("/movie/550", { headers: { "X-Internal-Token": TOKEN }, env });
+    assert.equal(res.status, 503);
+    assert.equal(upstreamCalls.length, 0);
+  });
+});
+
 describe("methods", () => {
   test("OPTIONS preflight from an allowed origin returns 204 with CORS headers", async () => {
     const res = await call("/search", { method: "OPTIONS", headers: { Origin: PAGES } });

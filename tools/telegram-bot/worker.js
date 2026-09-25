@@ -452,7 +452,8 @@ async function searchTmdb(env, query) {
   const url = new URL(`${TMDB_PROXY_URL}/search`);
   url.searchParams.set("q", query);
   url.searchParams.set("type", "multi");
-  const res = await env.TMDB_PROXY.fetch(url);
+  const headers = env.INTERNAL_TOKEN ? { "X-Internal-Token": env.INTERNAL_TOKEN } : {};
+  const res = await env.TMDB_PROXY.fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`TMDB proxy search failed: ${res.status}`);
   }

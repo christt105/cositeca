@@ -1,12 +1,19 @@
-name: Deploy Telegram bot worker
+name: Deploy TMDB proxy worker
 
 on:
   push:
     branches: [main]
     paths:
-      - "tools/telegram-bot/**"
-      - "site/rules.js"
+      - "tools/tmdb-proxy/**"
+      - ".github/workflows/deploy-tmdb-proxy.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-tmdb-proxy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -22,7 +29,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: tools/telegram-bot
+          workingDirectory: tools/tmdb-proxy
           command: deploy
           secrets: |
             INTERNAL_TOKEN

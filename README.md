@@ -197,17 +197,32 @@ series) and a `[[ratelimits]]` binding caps each IP at 60 requests per
 minute so the Worker cannot be used as a public TMDB mirror. If that
 binding is missing the Worker answers 503 instead of serving unlimited.
 
+The Telegram bot calls the proxy over a service binding, without any
+`Origin`. It sends an `X-Internal-Token` header instead, and the Worker
+skips the origin check only when that header matches its `INTERNAL_TOKEN`
+secret exactly. Those requests share a single `internal` rate-limit key
+(service-binding requests carry no `CF-Connecting-IP`). When
+`INTERNAL_TOKEN` is not set, no header value bypasses the origin check.
+
 Local development (no account needed): put `TMDB_API_KEY=...` in
 `tools/tmdb-proxy/.dev.vars` (gitignored) and run
 `npx wrangler dev` from that directory; it listens on `localhost:8787`.
 
-Deploy (once per change, from `tools/tmdb-proxy/`, with
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment):
+Deploy: every push to `main` that touches `tools/tmdb-proxy/**` runs
+`.github/workflows/deploy-tmdb-proxy.yml` (tests, then `wrangler deploy`
+with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository
+secrets); it can also be started by hand from the Actions tab. Both deploy
+workflows upload `INTERNAL_TOKEN` from the repository secret of the same name
+before deploying, so the two Workers always share one value. `wrangler
+deploy` keeps the Worker's other secrets, which are managed by hand (from
+`tools/tmdb-proxy/`, with the same two variables in the environment):
 
 ```sh
-npx wrangler deploy
 npx wrangler secret put TMDB_API_KEY
 ```
+
+Roll back with `git revert` of the offending commit (which redeploys) or
+`npx wrangler rollback` for an immediate switch to the previous version.
 
 The Worker is deployed at
 `https://cositeca-tmdb-proxy.christt105.workers.dev`, which is the

@@ -9,7 +9,11 @@ the deploy exactly as it already does today. The bot never touches `scripts/`,
 workflows or issue templates directly.
 
 TMDB search goes through the existing `cositeca-tmdb-proxy` worker
-(`site/rules.js#TMDB_PROXY_URL`), so this worker doesn't need its own TMDB key.
+(`site/rules.js#TMDB_PROXY_URL`) over the `TMDB_PROXY` service binding, so this
+worker doesn't need its own TMDB key. The proxy rejects requests without an allowed
+browser `Origin`, so the bot authenticates with an `X-Internal-Token` header holding
+the `INTERNAL_TOKEN` secret. Both deploy workflows upload it from the repository
+secret of the same name, so the two workers always share one value.
 `groups.yaml`, `qualities.yaml` and `languages.yaml` are fetched from the `main`
 branch on GitHub and cached in KV for an hour, so adding a new Telegram group there
 doesn't require redeploying this worker.
@@ -64,4 +68,6 @@ and the right secret headers instead of relying on live webhooks.
 Pure parsing/formatting logic (link validation, TMDB candidate formatting, issue body
 building, language keyboards) lives in `lib.js` and is covered by
 `test/telegram-bot.test.js` (`npm test`). The conversation orchestration in
-`worker.js` is integration-level and is exercised manually against `wrangler dev`.
+`worker.js` is integration-level and is exercised manually against `wrangler dev`,
+except for the TMDB search through the proxy, which `test/telegram-bot-proxy.test.js`
+runs end to end against the real proxy handler.
