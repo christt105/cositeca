@@ -1,24 +1,29 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { load, dump } from "js-yaml";
-import { ValidationError, createTmdbClient } from "./lib.js";
+import { ValidationError, createTmdbClient, isEntrypoint } from "./lib.js";
 import {
   processAdd,
   processFix,
   processPoster,
+  processReidentify,
+  resultFiles,
   describeResult,
   collectExistingLinks,
-} from "./add-entry.js";
+} from "./operations.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { loadConfig, saveLanguages } from "./config.js";
 
+export const MAX_OPERATIONS = 50;
 const OPERATIONS_LABEL = "Operaciones (JSON)";
 const REQUIRED_FIELDS = {
   add: ["tmdb", "quality", "link"],
   fix: ["old_link"],
   poster: ["tmdb"],
+  reidentify: ["tmdb", "new_tmdb"],
 };
 
 export function extractOperationsJson(issueBody) {
-  const body = (issueBody || "").replace(/\r\n/g, "\n");
+  const body = (issueBody || "").replace(/\r\n?/g, "\n");
   const heading = new RegExp(`^###\\s*${OPERATIONS_LABEL.replace(/[()]/g, "\\$&")}\\s*\\n+`, "m");
   const match = heading.exec(body);
   if (!match) return "";
@@ -38,20 +43,24 @@ export function parseOperations(text) {
   if (!Array.isArray(ops) || ops.length === 0) {
     throw new ValidationError("las operaciones deben ser un array no vacío");
   }
+  if (ops.length > MAX_OPERATIONS) {
+    throw new ValidationError(`demasiadas operaciones en un solo lote (${ops.length}), el máximo es ${MAX_OPERATIONS}`);
+  }
   return ops;
 }
 
 function validOperation(op) {
   if (typeof op !== "object" || op === null) return "operación inválida, se omite";
-  const required = REQUIRED_FIELDS[op.type];
-  if (!required) return `tipo de operación desconocido, se omite: ${JSON.stringify(op.type)}`;
-  for (const field of required) {
+  if (!Object.prototype.hasOwnProperty.call(REQUIRED_FIELDS, op.type)) {
+    return `tipo de operación desconocido, se omite: ${JSON.stringify(op.type)}`;
+  }
+  for (const field of REQUIRED_FIELDS[op.type]) {
     if (!op[field]) return `falta el campo "${field}" en una operación de tipo ${op.type}, se omite`;
   }
   return null;
 }
 
-function makeOverlayFs() {
+export function makeOverlayFs() {
   const overlay = new Map();
   return {
     fileExists: (p) => (overlay.has(p) ? overlay.get(p) !== null : existsSync(p)),
@@ -89,7 +98,7 @@ function updateExistingLinks(op, result, existingLinks) {
     existingLinks.add(op.link);
   } else if (op.type === "fix") {
     existingLinks.delete(op.old_link);
-    if (!result.deleted) existingLinks.add(op.new_link);
+    if (!result.deleted) existingLinks.add(op.new_link || op.old_link);
   }
 }
 
@@ -106,6 +115,7 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
       skipped.push(`operación ${i + 1}: ${invalidReason}`);
       continue;
     }
+    const languagesBefore = structuredClone(languages);
     try {
       let result;
       if (op.type === "add") {
@@ -118,14 +128,21 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
           qualities, groups, languages, existingLinks,
           readdir: fs.readdir, readFile: fs.readFile,
         });
+      } else if (op.type === "reidentify") {
+        result = await processReidentify(op, {
+          qualities, groups, languages, tmdbClient,
+          fileExists: fs.fileExists, readFile: fs.readFile,
+        });
       } else {
         result = await processPoster(op, {
           tmdbClient, fileExists: fs.fileExists, readFile: fs.readFile,
         });
       }
 
-      if (result.action === "delete") fs.remove(result.filePath);
-      else fs.write(result.filePath, result.content);
+      for (const { filePath, content } of resultFiles(result)) {
+        if (content === null) fs.remove(filePath);
+        else fs.write(filePath, content);
+      }
       if (result.languagesChanged) languagesChanged = true;
 
       updateExistingLinks(op, result, existingLinks);
@@ -133,6 +150,7 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
       applied.push(`operación ${i + 1}: ${close}`);
     } catch (err) {
       if (err instanceof ValidationError) {
+        for (const list of Object.keys(languagesBefore)) languages[list] = languagesBefore[list];
         skipped.push(`operación ${i + 1}: ${err.message}`);
       } else {
         throw err;
@@ -143,120 +161,110 @@ export async function applyBatch(ops, { qualities, groups, languages, tmdbClient
   return { applied, skipped, languagesChanged };
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function findRunId(gh, workflow, branch) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await sleep(1500);
-    const runs = JSON.parse(gh([
-      "run", "list", "--workflow", workflow, "--branch", branch,
-      "--limit", "1", "--json", "databaseId",
-    ]));
-    if (runs.length) return runs[0].databaseId;
-  }
-  throw new Error(`${workflow} did not start on ${branch}`);
-}
-
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
+  const issueAuthor = process.env.ISSUE_AUTHOR;
   const body = process.env.ISSUE_BODY || "";
-  const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
   const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
+  const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+  const progress = { branch: `bot/entry-batch-${issueNumber}`, pushed: false, prCreated: false };
 
   try {
-    const json = extractOperationsJson(body);
-    if (!json) {
-      throw new ValidationError("no se ha encontrado ningún JSON de operaciones en el issue");
-    }
-    const ops = parseOperations(json);
-
-    const qualities = load(readFileSync("qualities.yaml", "utf8"));
-    const groups = load(readFileSync("groups.yaml", "utf8"));
-    const languages = load(readFileSync("languages.yaml", "utf8"));
-    const fs = makeOverlayFs();
-
-    const result = await applyBatch(ops, { qualities, groups, languages, tmdbClient, fs });
-
-    for (const reason of result.skipped) console.warn(`skip: ${reason}`);
-
-    if (result.applied.length === 0) {
-      gh([
-        "issue", "comment", issueNumber, "--body",
-        `Ninguna operación se pudo aplicar (${result.skipped.length} omitida(s)). No se ha creado ningún PR.`,
-      ]);
-      gh(["issue", "close", issueNumber]);
-      return;
-    }
-
-    fs.flush();
-    if (result.languagesChanged) {
-      writeFileSync("languages.yaml", dump(languages));
-    }
-
-    const git = (args) => execFileSync("git", args, { encoding: "utf8" });
-    const branch = `bot/entry-batch-${issueNumber}`;
-    git(["config", "user.name", "cositeca-bot"]);
-    git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
-    git(["checkout", "-b", branch]);
-    git(["add", "-A"]);
-    const subject = `feat: batch changes (#${issueNumber})`;
-    git(["commit", "-m", subject, "-m", `${result.applied.length} operation(s) applied, ref #${issueNumber}`]);
-    git(["push", "-u", "origin", branch]);
-
-    gh(["workflow", "run", "validate.yml", "--ref", branch]);
-    const runId = await findRunId(gh, "validate.yml", branch);
-
-    const prBodyParts = [
-      `Ref #${issueNumber}`,
-      "",
-      `${result.applied.length} operación(es) aplicada(s):`,
-      ...result.applied.map((a) => `- ${a}`),
-    ];
-    if (result.skipped.length) {
-      prBodyParts.push(
-        "",
-        `${result.skipped.length} operación(es) omitida(s):`,
-        ...result.skipped.map((s) => `- ${s}`)
-      );
-    }
-    prBodyParts.push(
-      "",
-      "Este PR requiere revisión y merge manual: la validación automática que pasa no lo mergea solo."
-    );
-
-    const prUrl = gh([
-      "pr", "create", "--base", "main", "--head", branch,
-      "--title", subject, "--body", prBodyParts.join("\n"),
-    ]).trim();
-    const prNumber = prUrl.split("/").pop();
-
-    try {
-      gh(["run", "watch", String(runId), "--exit-status"]);
-    } catch {
-      gh([
-        "issue", "comment", issueNumber, "--body",
-        `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
-      ]);
-      return;
-    }
-
-    gh([
-      "issue", "comment", issueNumber, "--body",
-      `${result.applied.length} operación(es) aplicada(s) y validada(s), esperando revisión manual antes de mergear: ${prUrl} (PR #${prNumber}).`,
-    ]);
-    if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
-      gh(["issue", "close", issueNumber]);
-    }
+    await run({ issueNumber, issueAuthor, body, gh, git, progress });
   } catch (err) {
-    if (err instanceof ValidationError) {
-      gh(["issue", "comment", issueNumber, "--body", err.message]);
-      gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
-    } else {
-      throw err;
-    }
+    reportFailure(err, { issueNumber, ...progress, gh, git });
   }
 }
 
-if (process.env.ISSUE_NUMBER) {
+async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
+  const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
+
+  const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));
+  const openCount = JSON.parse(gh([
+    "issue", "list", "--label", "entry-batch", "--state", "open",
+    "--author", issueAuthor, "--json", "number",
+  ])).length;
+  const spamReason = checkAntiSpam(user.created_at, openCount);
+  if (spamReason) {
+    gh(["issue", "comment", issueNumber, "--body", spamReason]);
+    return;
+  }
+
+  const json = extractOperationsJson(body);
+  if (!json) {
+    throw new ValidationError("no se ha encontrado ningún JSON de operaciones en el issue");
+  }
+  const ops = parseOperations(json);
+
+  const { qualities, groups, languages } = loadConfig(process.cwd());
+  const fs = makeOverlayFs();
+
+  const result = await applyBatch(ops, { qualities, groups, languages, tmdbClient, fs });
+
+  for (const reason of result.skipped) console.warn(`skip: ${reason}`);
+
+  if (result.applied.length === 0) {
+    gh([
+      "issue", "comment", issueNumber, "--body",
+      `Ninguna operación se pudo aplicar (${result.skipped.length} omitida(s)). No se ha creado ningún PR.`,
+    ]);
+    gh(["issue", "close", issueNumber]);
+    return;
+  }
+
+  fs.flush();
+  if (result.languagesChanged) {
+    saveLanguages(process.cwd(), languages);
+  }
+  if (!hasPendingChanges(git)) {
+    gh(["issue", "comment", issueNumber, "--body", NO_CHANGES_MESSAGE]);
+    closeIssueIfOpen(gh, issueNumber);
+    return;
+  }
+
+  const subject = `feat: batch changes (#${issueNumber})`;
+  const prBodyParts = [
+    `Ref #${issueNumber}`,
+    "",
+    `${result.applied.length} operación(es) aplicada(s):`,
+    ...result.applied.map((a) => `- ${a}`),
+  ];
+  if (result.skipped.length) {
+    prBodyParts.push(
+      "",
+      `${result.skipped.length} operación(es) omitida(s):`,
+      ...result.skipped.map((s) => `- ${s}`)
+    );
+  }
+  prBodyParts.push(
+    "",
+    "Este PR requiere revisión y merge manual: la validación automática que pasa no lo mergea solo."
+  );
+
+  const { prUrl, prNumber, validated } = await openBotPr({
+    subject,
+    commitBody: `${result.applied.length} operation(s) applied, ref #${issueNumber}`,
+    prBody: prBodyParts.join("\n"),
+    autoMerge: false,
+    gh,
+    git,
+    progress,
+  });
+  if (!validated) {
+    gh([
+      "issue", "comment", issueNumber, "--body",
+      `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
+    ]);
+    return;
+  }
+
+  gh([
+    "issue", "comment", issueNumber, "--body",
+    `${result.applied.length} operación(es) aplicada(s) y validada(s), esperando revisión manual antes de mergear: ${prUrl} (PR #${prNumber}).`,
+  ]);
+  closeIssueIfOpen(gh, issueNumber);
+}
+
+if (process.env.ISSUE_NUMBER && isEntrypoint(import.meta.url)) {
   await main();
 }

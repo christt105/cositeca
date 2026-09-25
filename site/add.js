@@ -1,41 +1,18 @@
-import {
-  TMDB_PROXY_URL,
-  TMDB_URL_RE,
-  TMDB_ID_RE,
-  IMDB_ID_RE,
-  TELEGRAM_LINK_RE,
-  tmdbUrl,
-  issueUrl,
-} from "./rules.js";
-import { esc, typeIcon, renderChips, TYPE_LABELS } from "./ui.js";
+import { TMDB_URL_RE, TMDB_ID_RE, IMDB_ID_RE, tmdbUrl, issueUrl, newLanguageError } from "./rules.js";
+import { esc, typeIcon, renderChips, TYPE_LABELS, byIdIn, checked, debounce } from "./ui.js";
 import { enqueue, isBatchMode, getQueue } from "./queue.js";
+import { IMG, hasProxy, proxyGet, loadMeta } from "./tmdb.js";
+import { yearOf, nameOf, seasonOptions, checkboxGroup, validateLink } from "./forms.js";
+import { renderPosterPicker } from "./poster-picker.js";
 
 const view = document.getElementById("view-add");
-const IMG = "https://image.tmdb.org/t/p";
+const SEARCH_DEBOUNCE_MS = 300;
 
 let meta = null;
 let ctx = { catalog: [], byKey: new Map() };
-let searchTimer = null;
 let requestSeq = 0;
 let selected = null;
 let posterChoice = null;
-
-function proxyUrl() {
-  return TMDB_PROXY_URL || localStorage.getItem("tmdbProxy") || "";
-}
-
-async function proxyGet(path) {
-  const res = await fetch(`${proxyUrl()}${path}`);
-  if (!res.ok) throw new Error(`proxy ${path} failed: ${res.status}`);
-  return res.json();
-}
-
-export async function loadMeta() {
-  if (meta) return meta;
-  const res = await fetch("meta.json", { cache: "no-cache" });
-  meta = await res.json();
-  return meta;
-}
 
 function catalogKey(type, id) {
   return `${type === "tv" ? "series" : "movie"}/${id}`;
@@ -45,24 +22,13 @@ function toSiteType(type) {
   return type === "tv" ? "series" : "movie";
 }
 
-function yearOf(result) {
-  const date = result.release_date || result.first_air_date || "";
-  return date.slice(0, 4);
-}
-
-function nameOf(result) {
-  return result.title || result.name || "";
-}
-
-function $(id) {
-  return view.querySelector(`#${id}`);
-}
+const $ = byIdIn(view);
 
 export async function renderAdd(params, context) {
   ctx = context;
   selected = null;
   posterChoice = null;
-  if (!proxyUrl()) {
+  if (!hasProxy()) {
     view.innerHTML = `
       <a class="back" href="#/">&larr; Volver</a>
       <h2>Añadir una cosita</h2>
@@ -71,7 +37,7 @@ export async function renderAdd(params, context) {
     `;
     return;
   }
-  await loadMeta();
+  meta = await loadMeta();
   view.innerHTML = `
     <a class="back" href="#/">&larr; Volver</a>
     <h2>Añadir una cosita</h2>
@@ -84,10 +50,10 @@ export async function renderAdd(params, context) {
     <div id="add-outcome"></div>
   `;
   const input = $("add-search");
-  input.addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => handleQuery(input.value.trim()), 300);
-  });
+  input.addEventListener(
+    "input",
+    debounce(() => handleQuery(input.value.trim()), SEARCH_DEBOUNCE_MS)
+  );
   const tmdb = params.get("tmdb");
   const q = params.get("q");
   if (tmdb) {
@@ -160,7 +126,7 @@ function renderResults(items) {
       const inCatalog = ctx.byKey.has(catalogKey(r.media_type, r.id));
       return `
         <button type="button" class="result" data-type="${r.media_type}" data-id="${r.id}">
-          <img class="result__poster" src="${r.poster_path ? `${IMG}/w92${r.poster_path}` : ""}" alt="" loading="lazy">
+          <img class="result__poster" src="${r.poster_path ? esc(`${IMG}/w92${r.poster_path}`) : ""}" alt="" loading="lazy">
           <span class="result__info">
             <span class="result__title">${esc(nameOf(r))}</span>
             <span class="result__meta">${typeIcon(type)} ${TYPE_LABELS[type]} ${esc(yearOf(r))}${inCatalog ? ' <span class="chip">Ya en la Cositeca</span>' : ""}</span>
@@ -227,45 +193,6 @@ function renderExisting(item) {
   `;
 }
 
-export function hasProxy() {
-  return Boolean(proxyUrl());
-}
-
-export async function renderPosterPicker(box, type, id, defaultPoster, onChoose) {
-  let data;
-  try {
-    data = await proxyGet(`/images?type=${type}&id=${id}`);
-  } catch {
-    return false;
-  }
-  const posters = (data.posters || [])
-    .filter((p) => [null, "es", "en"].includes(p.iso_639_1))
-    .sort((a, b) => b.vote_count - a.vote_count || b.vote_average - a.vote_average)
-    .slice(0, 12);
-  if (posters.length === 0) return false;
-  box.innerHTML = `
-    <div class="add__label">Portada (la primera es la que TMDB usa por defecto)</div>
-    <div class="posters">
-      <button type="button" class="poster is-active" data-poster="">
-        <img src="${esc(defaultPoster)}" alt="" loading="lazy"><span>Por defecto</span>
-      </button>
-      ${posters
-        .map((p) => `
-          <button type="button" class="poster" data-poster="${IMG}/w342${p.file_path}">
-            <img src="${IMG}/w185${p.file_path}" alt="" loading="lazy"><span>${p.iso_639_1 ?? "sin texto"}</span>
-          </button>`)
-        .join("")}
-    </div>
-  `;
-  for (const btn of box.querySelectorAll(".poster")) {
-    btn.addEventListener("click", () => {
-      for (const b of box.querySelectorAll(".poster")) b.classList.toggle("is-active", b === btn);
-      onChoose(btn.dataset.poster || null);
-    });
-  }
-  return true;
-}
-
 async function loadPosters(type, id) {
   const box = $("add-posters");
   const current = selected;
@@ -274,24 +201,6 @@ async function loadPosters(type, id) {
     updateOutcome();
   });
   if (selected !== current) box.innerHTML = "";
-}
-
-function seasonOptions() {
-  const numbers = new Set(selected.seasons.map((s) => s.season_number));
-  const options = [];
-  if (!numbers.has(0)) options.push({ value: 0, label: "Especiales (0)" });
-  for (const s of [...selected.seasons].sort((a, b) => a.season_number - b.season_number)) {
-    options.push({ value: s.season_number, label: `${s.name} (${s.season_number})` });
-  }
-  options.push({ value: "all", label: "Serie completa (all)" });
-  options.push({ value: "other", label: "Otra (escribir número)" });
-  return options;
-}
-
-export function checkboxGroup(name, values, checkedValues = []) {
-  return values
-    .map((v) => `<label class="check"><input type="checkbox" name="${name}" value="${esc(v)}"${checkedValues.includes(v) ? " checked" : ""}> ${esc(v)}</label>`)
-    .join("");
 }
 
 function renderForm() {
@@ -312,7 +221,7 @@ function renderForm() {
       <div>
         <label class="add__label" for="add-season">Temporada</label>
         <select id="add-season" class="filter-select">
-          ${seasonOptions().map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}
+          ${seasonOptions(selected.seasons).map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}
         </select>
         <input id="add-season-other" class="search hidden" type="text" inputmode="numeric" pattern="\\d+" placeholder="Número de temporada">
       </div>` : ""}
@@ -323,6 +232,7 @@ function renderForm() {
     <div class="add__label">Subtítulos</div>
     <div class="checks">${checkboxGroup("subs", meta.languages.subs)}</div>
     <input id="add-subs-other" class="search" type="text" maxlength="30" placeholder="Otro idioma de subtítulos (opcional)">
+    <p id="add-language-error" class="add__error"></p>
     <label class="add__label" for="add-tags">Etiquetas (opcional, separadas por comas)</label>
     <input id="add-tags" class="search" type="text" placeholder="HDR, REMUX">
     <button type="submit" class="btn btn--add add__submit">Aceptar</button>
@@ -335,9 +245,9 @@ function renderForm() {
     const fields = buildAddFields();
     if (!fields) return;
     if (isBatchMode()) {
-      enqueue({ type: "add", fields, label: addLabel(fields) });
+      const replaced = enqueue({ type: "add", fields, label: addLabel(fields) });
       $("add-outcome").innerHTML = `
-        <p class="add__hint">Añadido a la cola (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>
+        <p class="add__hint">${replaced ? "Cambio actualizado en la cola" : "Añadido a la cola"} (${getQueue().length}). <a href="#/batch">Ver resumen</a>.</p>
       `;
       return;
     }
@@ -359,30 +269,15 @@ function renderForm() {
   updateOutcome();
 }
 
-export function validateLink(link) {
-  if (!link) return "";
-  if (link.includes("t.me/+") || link.includes("joinchat")) {
-    return "Los links de invitación no valen, tiene que ser el link de un mensaje.";
-  }
-  const match = TELEGRAM_LINK_RE.exec(link);
-  if (!match) {
-    return "Tiene que ser https://t.me/c/<grupo>/<mensaje>, copiado con Copiar enlace.";
-  }
-  if (!Object.prototype.hasOwnProperty.call(meta.groups, match[1])) {
-    return "Ese link no es de ninguno de los grupos de la Cositeca.";
-  }
-  return "";
-}
-
-function checked(name) {
-  return [...view.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
-}
-
 function buildAddFields() {
   const link = $("add-link").value.trim();
-  const error = validateLink(link);
+  const error = validateLink(link, meta.groups);
   $("add-link-error").textContent = error;
-  if (!link || error) return null;
+  const newAudio = $("add-audio-other").value.trim();
+  const newSubs = $("add-subs-other").value.trim();
+  const languageError = newLanguageError(newAudio) || newLanguageError(newSubs);
+  $("add-language-error").textContent = languageError;
+  if (!link || error || languageError) return null;
   const seasonValue = selected.type === "tv"
     ? ($("add-season").value === "other" ? $("add-season-other").value.trim() : $("add-season").value)
     : "";
@@ -390,10 +285,10 @@ function buildAddFields() {
     tmdb: tmdbUrl(toSiteType(selected.type), selected.id),
     quality: $("add-quality").value,
     season: seasonValue,
-    audio: checked("audio").join(", "),
-    subs: checked("subs").join(", "),
-    new_audio_language: $("add-audio-other").value.trim(),
-    new_subs_language: $("add-subs-other").value.trim(),
+    audio: checked(view, "audio").join(", "),
+    subs: checked(view, "subs").join(", "),
+    new_audio_language: newAudio,
+    new_subs_language: newSubs,
     tags: $("add-tags").value.trim(),
     poster: posterChoice ?? "",
     link,
@@ -402,7 +297,7 @@ function buildAddFields() {
 
 function addLabel(fields) {
   const season = fields.season ? ` T${fields.season}` : "";
-  return `${selected.title} — añadir ${fields.quality}${season}`;
+  return `${selected.title} · añadir ${fields.quality}${season}`;
 }
 
 function updateOutcome() {

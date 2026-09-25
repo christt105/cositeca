@@ -1,300 +1,60 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { load, dump } from "js-yaml";
+import { createTmdbClient, isEntrypoint } from "./lib.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { loadConfig, saveLanguages } from "./config.js";
+import { parseIssueBody } from "./issue-fields.js";
 import {
-  ValidationError,
-  parseTmdbInput,
-  resolveTmdbTarget,
-  validateLinkEntry,
-  validateQuality,
-  validatePoster,
-  sanitizeNewLanguage,
-  createTmdbClient,
-} from "./lib.js";
+  processAdd,
+  processFix,
+  processPoster,
+  processReidentify,
+  resultFiles,
+  describeResult,
+  collectExistingLinks,
+} from "./operations.js";
 
-export const FIELD_LABELS = {
-  tmdb: "URL de TMDB o id de IMDB",
-  quality: "Calidad",
-  season: "Temporada",
-  audio: "Audio",
-  subs: "Subtítulos",
-  new_audio_language: "Nuevo idioma (audio)",
-  new_subs_language: "Nuevo idioma (subtítulos)",
-  tags: "Etiquetas",
-  poster: "Portada",
-  link: "Link de Telegram",
-  old_link: "Link actual",
-  new_link: "Link nuevo",
-};
-
-export function parseIssueBody(body, fieldIds) {
-  const sections = body.split(/\n(?=### )/);
-  const byLabel = new Map();
-  for (const section of sections) {
-    const match = /^### (.+?)\n+([\s\S]*)$/.exec(section.trim());
-    if (!match) continue;
-    const [, label, rawValue] = match;
-    const value = rawValue.trim();
-    byLabel.set(label.trim(), value === "_No response_" ? "" : value);
-  }
-  const fields = {};
-  for (const id of fieldIds) {
-    fields[id] = byLabel.get(FIELD_LABELS[id]) ?? "";
-  }
-  return fields;
-}
-
-function parseSeasonField(raw) {
-  if (raw === "" || raw === undefined) return undefined;
-  if (raw === "all") return "all";
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) {
-    throw new ValidationError(`season must be "all" or an integer >= 0, got ${raw}`);
-  }
-  return n;
-}
-
-const ENTRY_KEY_ORDER = ["season", "quality", "audio", "subs", "tags", "link"];
-
-function orderEntry(entry) {
-  const ordered = {};
-  for (const key of ENTRY_KEY_ORDER) {
-    if (entry[key] !== undefined) ordered[key] = entry[key];
-  }
-  return ordered;
-}
-
-function parseListField(raw) {
-  if (!raw) return undefined;
-  const values = raw.split(",").map((t) => t.trim()).filter(Boolean);
-  return values.length ? values : undefined;
-}
-
-function dedupe(list) {
-  return [...new Set(list)];
-}
-
-function applyNewLanguage(raw, list, languages) {
-  const resolved = sanitizeNewLanguage(raw, languages[list]);
-  if (resolved === undefined) return { values: undefined, changed: false };
-  const changed = !languages[list].includes(resolved);
-  if (changed) languages[list].push(resolved);
-  return { values: [resolved], changed };
-}
-
-export async function processAdd(fields, { qualities, groups, languages, tmdbClient, existingLinks, fileExists, readFile }) {
-  const season = parseSeasonField(fields.season);
-  const descriptor = parseTmdbInput(fields.tmdb, { hasSeason: season !== undefined });
-  const target = await resolveTmdbTarget(descriptor, tmdbClient);
-  const kind = target.type === "movie" ? "movie" : "series";
-  const dir = target.type === "movie" ? "movies" : "series";
-
-  if (existingLinks.has(fields.link)) {
-    throw new ValidationError(`link already exists in the catalog: ${fields.link}`);
-  }
-
-  let audio = parseListField(fields.audio);
-  let subs = parseListField(fields.subs);
-  const tags = parseListField(fields.tags);
-
-  const newAudio = applyNewLanguage(fields.new_audio_language, "audio", languages);
-  if (newAudio.values) audio = dedupe([...(audio ?? []), ...newAudio.values]);
-  const newSubs = applyNewLanguage(fields.new_subs_language, "subs", languages);
-  if (newSubs.values) subs = dedupe([...(subs ?? []), ...newSubs.values]);
-  const languagesChanged = newAudio.changed || newSubs.changed;
-
-  const entry = orderEntry({ season, quality: fields.quality, audio, subs, tags, link: fields.link });
-  validateLinkEntry(entry, { type: kind, qualities, groups, languages });
-
-  const info = target.type === "movie"
-    ? await tmdbClient.getMovie(target.id)
-    : await tmdbClient.getTv(target.id);
-  const title = target.type === "movie" ? info.title : info.name;
-
-  const poster = fields.poster?.trim() || undefined;
-  validatePoster(poster);
-
-  const filePath = `${dir}/${target.id}.yaml`;
-  let data;
-  if (fileExists(filePath)) {
-    data = load(readFile(filePath));
-    data.links.push(entry);
-  } else {
-    data = { title, links: [entry] };
-  }
-  if (poster) {
-    data = { title: data.title, poster, links: data.links };
-  }
-
-  return { filePath, content: dump(data), title, quality: fields.quality, action: "write", languagesChanged };
-}
-
-export function findFileByLink(link, { readdir, readFile }) {
-  for (const dir of ["movies", "series"]) {
-    let filenames = [];
-    try {
-      filenames = readdir(dir);
-    } catch {
-      continue;
-    }
-    for (const filename of filenames) {
-      const filePath = `${dir}/${filename}`;
-      const data = load(readFile(filePath));
-      const idx = data.links.findIndex((l) => l.link === link);
-      if (idx !== -1) {
-        const type = dir === "movies" ? "movie" : "series";
-        return { filePath, data, idx, type };
-      }
-    }
-  }
-  return null;
-}
-
-export function processFix(fields, { qualities, groups, languages, existingLinks, readdir, readFile }) {
-  const located = findFileByLink(fields.old_link, { readdir, readFile });
-  if (!located) {
-    throw new ValidationError(`link not found in the catalog: ${fields.old_link}`);
-  }
-  const { filePath, data, idx, type } = located;
-  const oldEntry = data.links[idx];
-  const title = data.title;
-  let languagesChanged = false;
-
-  if (!fields.new_link) {
-    data.links.splice(idx, 1);
-  } else {
-    if (fields.new_link !== fields.old_link && existingLinks.has(fields.new_link)) {
-      throw new ValidationError(`link already exists in the catalog: ${fields.new_link}`);
-    }
-    const updated = { ...oldEntry, link: fields.new_link };
-    if (fields.quality) {
-      validateQuality(fields.quality, qualities);
-      updated.quality = fields.quality;
-    }
-    const season = parseSeasonField(fields.season);
-    if (season !== undefined) {
-      updated.season = season;
-    }
-    const audio = parseListField(fields.audio);
-    if (audio) updated.audio = audio;
-    const subs = parseListField(fields.subs);
-    if (subs) updated.subs = subs;
-    if (fields.tags === "-") {
-      delete updated.tags;
-    } else {
-      const tags = parseListField(fields.tags);
-      if (tags) updated.tags = tags;
-    }
-
-    const newAudio = applyNewLanguage(fields.new_audio_language, "audio", languages);
-    if (newAudio.values) updated.audio = dedupe([...(updated.audio ?? []), ...newAudio.values]);
-    const newSubs = applyNewLanguage(fields.new_subs_language, "subs", languages);
-    if (newSubs.values) updated.subs = dedupe([...(updated.subs ?? []), ...newSubs.values]);
-    languagesChanged = newAudio.changed || newSubs.changed;
-
-    validateLinkEntry(updated, { type, qualities, groups, languages });
-    data.links[idx] = orderEntry(updated);
-  }
-
-  const quality = fields.new_link ? data.links[idx].quality : oldEntry.quality;
-  const deleted = !fields.new_link;
-
-  if (data.links.length === 0) {
-    return { filePath, content: null, title, quality, action: "delete", deleted, languagesChanged };
-  }
-  return { filePath, content: dump(data), title, quality, action: "write", deleted, languagesChanged };
-}
-
-export async function processPoster(fields, { tmdbClient, fileExists, readFile }) {
-  const descriptor = parseTmdbInput(fields.tmdb);
-  const target = await resolveTmdbTarget(descriptor, tmdbClient);
-  const dir = target.type === "movie" ? "movies" : "series";
-  const filePath = `${dir}/${target.id}.yaml`;
-  if (!fileExists(filePath)) {
-    throw new ValidationError(`title not found in the catalog: ${filePath}`);
-  }
-  const poster = fields.poster?.trim() || undefined;
-  validatePoster(poster);
-  const current = load(readFile(filePath));
-  const data = poster
-    ? { title: current.title, poster, links: current.links }
-    : { title: current.title, links: current.links };
-  return { filePath, content: dump(data), title: current.title, action: "write" };
-}
-
-export function describeResult(issueLabel, result) {
-  const messages = {
-    add: {
-      subject: `feat: add ${result.title} ${result.quality}`,
-      close: `Añadido: ${result.title} (${result.quality}).`,
-    },
-    fix: result.deleted
-      ? {
-        subject: `fix: remove link from ${result.title}`,
-        close: `Borrado el link de ${result.title} (${result.quality}).`,
-      }
-      : {
-        subject: `fix: update link for ${result.title}`,
-        close: `Actualizado el link de ${result.title} (${result.quality}).`,
-      },
-    poster: {
-      subject: `fix: update poster for ${result.title}`,
-      close: `Portada actualizada para ${result.title}.`,
-    },
-  };
-  return messages[issueLabel];
-}
-
-export function checkAntiSpam(createdAt, openEntryIssueCount) {
-  const accountAgeDays = (Date.now() - new Date(createdAt).getTime()) / 86400000;
-  if (accountAgeDays < 1) {
-    return "Cuenta demasiado nueva o demasiadas peticiones abiertas";
-  }
-  if (openEntryIssueCount > 3) {
-    return "Cuenta demasiado nueva o demasiadas peticiones abiertas";
-  }
-  return null;
-}
-
-export function collectExistingLinks() {
-  const links = new Set();
-  for (const dir of ["movies", "series"]) {
-    if (!existsSync(dir)) continue;
-    for (const filename of readdirSync(dir)) {
-      const data = load(readFileSync(`${dir}/${filename}`, "utf8"));
-      for (const entry of data.links) links.add(entry.link);
-    }
-  }
-  return links;
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function findRunId(gh, workflow, branch) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await sleep(1500);
-    const runs = JSON.parse(gh([
-      "run", "list", "--workflow", workflow, "--branch", branch,
-      "--limit", "1", "--json", "databaseId",
-    ]));
-    if (runs.length) return runs[0].databaseId;
-  }
-  throw new Error(`${workflow} did not start on ${branch}`);
-}
+export { FIELD_LABELS, parseIssueBody } from "./issue-fields.js";
+export {
+  processAdd,
+  findFileByLink,
+  DELETE_LINK,
+  wantsLinkDeletion,
+  processFix,
+  processPoster,
+  processReidentify,
+  resultFiles,
+  describeResult,
+  collectExistingLinks,
+} from "./operations.js";
+export {
+  checkAntiSpam,
+  INTERNAL_ERROR_LABEL,
+  INTERNAL_ERROR_MESSAGE,
+  reportFailure,
+} from "./gh-flow.js";
 
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueAuthor = process.env.ISSUE_AUTHOR;
   const issueLabels = (process.env.ISSUE_LABELS || "").split(",");
-  const issueLabel = ["fix", "poster"].find((l) => issueLabels.includes(l)) ?? "add";
+  const issueLabel = ["fix", "poster", "reidentify"].find((l) => issueLabels.includes(l)) ?? "add";
   const body = process.env.ISSUE_BODY;
 
-  const qualities = load(readFileSync("qualities.yaml", "utf8"));
-  const groups = load(readFileSync("groups.yaml", "utf8"));
-  const languages = load(readFileSync("languages.yaml", "utf8"));
-  const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
-
   const gh = (args) => execFileSync("gh", args, { encoding: "utf8" });
+  const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+  const progress = { branch: `bot/entry-${issueNumber}`, pushed: false, prCreated: false };
+
+  try {
+    await run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress });
+  } catch (err) {
+    reportFailure(err, { issueNumber, ...progress, gh, git });
+  }
+}
+
+async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progress }) {
+  const { qualities, groups, languages } = loadConfig(process.cwd());
+  const tmdbClient = createTmdbClient(process.env.TMDB_API_KEY);
 
   const user = JSON.parse(gh(["api", `users/${issueAuthor}`]));
   const openCountOut = gh([
@@ -310,96 +70,87 @@ async function main() {
 
   const existingLinks = collectExistingLinks();
 
-  try {
-    let result;
-    if (issueLabel === "add") {
-      const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "new_audio_language", "new_subs_language", "tags", "poster", "link"]);
-      result = await processAdd(fields, {
-        qualities,
-        groups,
-        languages,
-        tmdbClient,
-        existingLinks,
-        fileExists: existsSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    } else if (issueLabel === "poster") {
-      const fields = parseIssueBody(body, ["tmdb", "poster"]);
-      result = await processPoster(fields, {
-        tmdbClient,
-        fileExists: existsSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    } else {
-      const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "new_audio_language", "new_subs_language", "season", "tags"]);
-      result = processFix(fields, {
-        qualities,
-        groups,
-        languages,
-        existingLinks,
-        readdir: readdirSync,
-        readFile: (p) => readFileSync(p, "utf8"),
-      });
-    }
+  let result;
+  if (issueLabel === "add") {
+    const fields = parseIssueBody(body, ["tmdb", "quality", "season", "audio", "subs", "new_audio_language", "new_subs_language", "tags", "poster", "link"]);
+    result = await processAdd(fields, {
+      qualities,
+      groups,
+      languages,
+      tmdbClient,
+      existingLinks,
+      fileExists: existsSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  } else if (issueLabel === "poster") {
+    const fields = parseIssueBody(body, ["tmdb", "poster"]);
+    result = await processPoster(fields, {
+      tmdbClient,
+      fileExists: existsSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  } else if (issueLabel === "reidentify") {
+    const fields = parseIssueBody(body, ["tmdb", "new_tmdb", "old_link", "season", "poster"]);
+    result = await processReidentify(fields, {
+      qualities,
+      groups,
+      languages,
+      tmdbClient,
+      fileExists: existsSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  } else {
+    const fields = parseIssueBody(body, ["tmdb", "old_link", "new_link", "quality", "audio", "subs", "new_audio_language", "new_subs_language", "season", "tags"]);
+    result = processFix(fields, {
+      qualities,
+      groups,
+      languages,
+      existingLinks,
+      readdir: readdirSync,
+      readFile: (p) => readFileSync(p, "utf8"),
+    });
+  }
 
-    if (result.action === "delete") {
-      unlinkSync(result.filePath);
-    } else {
-      writeFileSync(result.filePath, result.content);
-    }
-    if (result.languagesChanged) {
-      writeFileSync("languages.yaml", dump(languages));
-    }
+  for (const { filePath, content } of resultFiles(result)) {
+    if (content === null) unlinkSync(filePath);
+    else writeFileSync(filePath, content);
+  }
+  if (result.languagesChanged) {
+    saveLanguages(process.cwd(), languages);
+  }
 
-    const { subject, close } = describeResult(issueLabel, result);
+  if (!hasPendingChanges(git)) {
+    gh(["issue", "comment", issueNumber, "--body", NO_CHANGES_MESSAGE]);
+    closeIssueIfOpen(gh, issueNumber);
+    return;
+  }
 
-    const git = (args) => execFileSync("git", args, { encoding: "utf8" });
-    const branch = `bot/entry-${issueNumber}`;
-    git(["config", "user.name", "cositeca-bot"]);
-    git(["config", "user.email", "cositeca-bot@users.noreply.github.com"]);
-    git(["checkout", "-b", branch]);
-    git(["add", "-A"]);
-    git(["commit", "-m", subject, "-m", `Closes #${issueNumber}`]);
-    git(["push", "-u", "origin", branch]);
+  const { subject, close } = describeResult(issueLabel, result);
 
-    gh(["workflow", "run", "validate.yml", "--ref", branch]);
-    const runId = await findRunId(gh, "validate.yml", branch);
-
-    const prUrl = gh([
-      "pr", "create", "--base", "main", "--head", branch,
-      "--title", subject, "--body", `Closes #${issueNumber}`,
-    ]).trim();
-    const prNumber = prUrl.split("/").pop();
-
-    try {
-      gh(["run", "watch", String(runId), "--exit-status"]);
-    } catch {
-      gh([
-        "issue", "comment", issueNumber, "--body",
-        "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
-      ]);
-      return;
-    }
-
-    gh(["pr", "merge", prNumber, "--squash", "--delete-branch"]);
-    gh(["workflow", "run", "deploy.yml"]);
+  const { validated } = await openBotPr({
+    subject,
+    commitBody: `Closes #${issueNumber}`,
+    prBody: `Closes #${issueNumber}`,
+    autoMerge: true,
+    gh,
+    git,
+    progress,
+  });
+  if (!validated) {
     gh([
       "issue", "comment", issueNumber, "--body",
-      `${close} La web se actualiza en un par de minutos.`,
+      "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
     ]);
-    if (gh(["issue", "view", issueNumber, "--json", "state", "--jq", ".state"]).trim() !== "CLOSED") {
-      gh(["issue", "close", issueNumber]);
-    }
-  } catch (err) {
-    if (err instanceof ValidationError) {
-      gh(["issue", "comment", issueNumber, "--body", err.message]);
-      gh(["issue", "edit", issueNumber, "--add-label", "invalid"]);
-    } else {
-      throw err;
-    }
+    return;
   }
+
+  gh([
+    "issue", "comment", issueNumber, "--body",
+    `${close} La web se actualiza en un par de minutos.`,
+  ]);
+  closeIssueIfOpen(gh, issueNumber);
 }
 
-if (process.env.ISSUE_NUMBER) {
+if (process.env.ISSUE_NUMBER && isEntrypoint(import.meta.url)) {
   await main();
 }

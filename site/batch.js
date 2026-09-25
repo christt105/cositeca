@@ -1,13 +1,12 @@
 import { issueUrl } from "./rules.js";
-import { esc } from "./ui.js";
+import { esc, byIdIn } from "./ui.js";
 import { getQueue, removeAt, clear } from "./queue.js";
 
 const view = document.getElementById("view-batch");
 const URL_LENGTH_THRESHOLD = 6500;
+const MAX_OPERATIONS = 50;
 
-function $(id) {
-  return view.querySelector(`#${id}`);
-}
+const $ = byIdIn(view);
 
 function renderRow(item, index) {
   return `
@@ -16,6 +15,16 @@ function renderRow(item, index) {
       <button type="button" class="link-btn" data-remove="${index}">Quitar</button>
     </div>
   `;
+}
+
+function buildConfirm(queue) {
+  const operations = queue.map((item) => ({ type: item.type, ...item.fields }));
+  const json = JSON.stringify(operations);
+  const prefilledUrl = issueUrl("batch.yml", { operations: json });
+  if (prefilledUrl.length <= URL_LENGTH_THRESHOLD) {
+    return { url: prefilledUrl, json: null };
+  }
+  return { url: issueUrl("batch.yml"), json };
 }
 
 export function renderBatch() {
@@ -28,6 +37,16 @@ export function renderBatch() {
     `;
     return;
   }
+  const tooMany = queue.length > MAX_OPERATIONS;
+  const { url, json } = tooMany ? { url: "", json: null } : buildConfirm(queue);
+  const confirmControl = tooMany
+    ? `<button type="button" class="btn btn--add" disabled>Confirmar (${queue.length})</button>`
+    : `<a class="btn btn--add" id="batch-confirm" href="${esc(url)}" target="_blank" rel="noopener">Confirmar (${queue.length})</a>`;
+  const note = tooMany
+    ? `<p class="add__error">Un lote admite como máximo ${MAX_OPERATIONS} cambios: quita ${queue.length - MAX_OPERATIONS} o confírmalos en dos tandas.</p>`
+    : json
+      ? `<p class="add__hint">La cola es demasiado grande para prerellenar la URL: al pulsar Confirmar se copia el JSON al portapapeles y se abre el formulario vacío, pégalo en el campo "Operaciones (JSON)".</p>`
+      : `<p class="add__hint">Confirmar abre el formulario de GitHub con todo relleno: revisa los campos y pulsa Submit. Si se abre la app de GitHub, mantén pulsado Confirmar para abrirlo en una pestaña nueva. La cola se conserva hasta que pulses "Vaciar cola".</p>`;
   view.innerHTML = `
     <a class="back" href="#/">&larr; Volver</a>
     <h2>Cola de cambios</h2>
@@ -35,8 +54,9 @@ export function renderBatch() {
     <div id="batch-list">${queue.map(renderRow).join("")}</div>
     <div class="edit__actions">
       <button type="button" class="btn" id="batch-clear">Vaciar cola</button>
-      <button type="button" class="btn btn--add" id="batch-confirm">Confirmar (${queue.length})</button>
+      ${confirmControl}
     </div>
+    ${note}
     <div id="batch-outcome"></div>
   `;
   for (const btn of view.querySelectorAll("[data-remove]")) {
@@ -50,40 +70,11 @@ export function renderBatch() {
     clear();
     renderBatch();
   });
-  $("batch-confirm").addEventListener("click", confirmBatch);
-}
-
-function confirmBatch() {
-  const queue = getQueue();
-  const operations = queue.map((item) => ({ type: item.type, ...item.fields }));
-  const json = JSON.stringify(operations);
-  const prefilledUrl = issueUrl("batch.yml", { operations: json });
-  const outcome = $("batch-outcome");
-
-  if (prefilledUrl.length <= URL_LENGTH_THRESHOLD) {
-    window.open(prefilledUrl, "_blank", "noopener");
-    outcome.innerHTML = `
-      <p class="add__hint">Se abre el formulario de GitHub con todo relleno: revisa los campos y pulsa Submit. Si no se ha abierto, <a href="${esc(prefilledUrl)}" target="_blank" rel="noopener">ábrelo desde aquí</a>.</p>
-    `;
-    clear();
-    renderBatch();
-    return;
-  }
-
-  const blankUrl = issueUrl("batch.yml");
-  navigator.clipboard
-    .writeText(json)
-    .then(() => {
-      window.open(blankUrl, "_blank", "noopener");
-      outcome.innerHTML = `
-        <p class="add__hint">La cola es demasiado grande para prerellenar la URL: se ha copiado el JSON al portapapeles, pégalo en el campo "Operaciones (JSON)" del formulario que se acaba de abrir. Si no se ha abierto, <a href="${esc(blankUrl)}" target="_blank" rel="noopener">ábrelo desde aquí</a>.</p>
-      `;
-      clear();
-      renderBatch();
-    })
-    .catch(() => {
-      outcome.innerHTML = `
-        <p class="add__error">La cola es demasiado grande para prerellenar la URL y no se ha podido copiar al portapapeles. Prueba a confirmar con menos cambios en la cola.</p>
-      `;
+  if (json) {
+    $("batch-confirm").addEventListener("click", () => {
+      navigator.clipboard.writeText(json).catch(() => {
+        $("batch-outcome").innerHTML = `<p class="add__error">No se ha podido copiar el JSON al portapapeles: prueba con menos cambios en la cola.</p>`;
+      });
     });
+  }
 }

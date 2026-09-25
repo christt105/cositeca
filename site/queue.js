@@ -24,11 +24,21 @@ export function getQueue() {
   return read(QUEUE_KEY, []);
 }
 
+function targetKey({ type, fields }) {
+  if (type === "fix") return `fix:${fields.old_link}`;
+  if (type === "reidentify") return `reidentify:${fields.old_link || fields.tmdb}`;
+  if (type === "poster") return `poster:${fields.tmdb}`;
+  return `add:${fields.link}`;
+}
+
 export function enqueue(item) {
   const queue = getQueue();
-  queue.push(item);
+  const existing = queue.findIndex((queued) => targetKey(queued) === targetKey(item));
+  if (existing === -1) queue.push(item);
+  else queue[existing] = item;
   localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
   notify();
+  return existing !== -1;
 }
 
 export function removeAt(index) {

@@ -1,4 +1,4 @@
-const CACHE = "cositeca-v1";
+const CACHE = "cositeca-v2";
 const SHELL = [
   "./",
   "index.html",
@@ -6,6 +6,10 @@ const SHELL = [
   "app.js",
   "add.js",
   "edit.js",
+  "reid.js",
+  "tmdb.js",
+  "forms.js",
+  "poster-picker.js",
   "batch.js",
   "queue.js",
   "ui.js",

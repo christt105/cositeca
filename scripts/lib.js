@@ -1,16 +1,37 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   TELEGRAM_LINK_RE,
   TMDB_URL_RE,
   TMDB_ID_RE,
   IMDB_ID_RE,
+  cleanNewLanguage,
+  newLanguageError,
+  normalizeText,
+  linkKey,
 } from "../site/rules.js";
 
 export { TELEGRAM_LINK_RE, TMDB_URL_RE, TMDB_ID_RE, IMDB_ID_RE };
 export const FILENAME_RE = /^\d+\.yaml$/;
 
 export class ValidationError extends Error {}
+
+/**
+ * Registry of links by linkKey. `add(link, path)` returns the path that
+ * already holds the same link, or undefined after registering it.
+ */
+export function createLinkIndex() {
+  const seen = new Map();
+  return {
+    add(link, path) {
+      const key = linkKey(link);
+      if (seen.has(key)) return seen.get(key);
+      seen.set(key, path);
+      return undefined;
+    },
+  };
+}
 
 export function parseTelegramLink(link) {
   if (typeof link !== "string") {
@@ -113,25 +134,26 @@ export function validateLanguages(values, field, allowed) {
   }
 }
 
-const MAX_NEW_LANGUAGE_LENGTH = 30;
-
 export function sanitizeNewLanguage(raw, existing) {
   if (raw === undefined || raw === null) return undefined;
-  const value = raw.trim().replace(/\s+/g, " ");
+  const value = cleanNewLanguage(raw);
   if (value === "") return undefined;
-  if (value.length > MAX_NEW_LANGUAGE_LENGTH) {
-    throw new ValidationError(
-      `new language is too long (max ${MAX_NEW_LANGUAGE_LENGTH} characters): ${value}`
-    );
-  }
-  const existingMatch = existing.find((v) => v.toLowerCase() === value.toLowerCase());
+  const error = newLanguageError(value);
+  if (error) throw new ValidationError(`${error} Recibido: ${value}`);
+  const key = normalizeText(value);
+  const existingMatch = existing.find((v) => normalizeText(v) === key);
   return existingMatch ?? value;
 }
+
+const HTTPS_URL_RE = /^https:\/\/[^\s/?#@]+(?:[/?#]\S*)?$/;
 
 export function validatePoster(poster) {
   if (poster === undefined) return;
   if (typeof poster !== "string" || poster.trim() === "") {
     throw new ValidationError("poster must be a non-empty string");
+  }
+  if (!HTTPS_URL_RE.test(poster)) {
+    throw new ValidationError(`poster must be an https:// URL, got ${poster}`);
   }
 }
 
@@ -151,6 +173,9 @@ export function validateSeasonPosters(seasonPosters, type) {
     }
     if (typeof poster !== "string" || poster.trim() === "") {
       throw new ValidationError(`seasonPosters["${season}"] must be a non-empty string`);
+    }
+    if (!HTTPS_URL_RE.test(poster)) {
+      throw new ValidationError(`seasonPosters["${season}"] must be an https:// URL, got ${poster}`);
     }
   }
 }
@@ -194,6 +219,24 @@ export function validateTitleFile(type, filename, data, { qualities, groups, lan
   }
 }
 
+/**
+ * Maps each path to the timestamp of its latest addition, from the output of
+ * `git log --no-renames --diff-filter=A --name-only --format=%x00%at`, which
+ * lists commits newest first with each header line starting with a NUL.
+ */
+export function parseAddedTimestamps(output) {
+  const timestamps = new Map();
+  let currentTimestamp = null;
+  for (const line of output.split("\n")) {
+    if (line.startsWith("\0")) {
+      currentTimestamp = Number(line.slice(1));
+    } else if (line.trim() && currentTimestamp !== null && !timestamps.has(line)) {
+      timestamps.set(line, currentTimestamp);
+    }
+  }
+  return timestamps;
+}
+
 export function loadTmdbCache(path) {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -207,8 +250,19 @@ export function saveTmdbCache(path, cache) {
   writeFileSync(path, JSON.stringify(cache));
 }
 
-export function createTmdbClient(apiKey, { cache = {} } = {}) {
+export function purgeTmdbCache(cache, usedKeys) {
+  for (const key of Object.keys(cache)) {
+    if (!usedKeys.has(key)) {
+      delete cache[key];
+    }
+  }
+}
+
+export const TMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function createTmdbClient(apiKey, { cache = {}, now = () => Date.now() } = {}) {
   const useBearer = apiKey.startsWith("eyJ");
+  const usedKeys = new Set();
   async function request(path, params = {}) {
     const url = new URL(`https://api.themoviedb.org/3${path}`);
     url.searchParams.set("language", "es-ES");
@@ -228,14 +282,24 @@ export function createTmdbClient(apiKey, { cache = {} } = {}) {
     return res.json();
   }
   async function cached(key, fetcher) {
-    if (Object.prototype.hasOwnProperty.call(cache, key)) {
-      return cache[key];
+    usedKeys.add(key);
+    const entry = cache[key];
+    const wrapped = entry && typeof entry.fetchedAt === "number";
+    if (wrapped && now() - entry.fetchedAt < TMDB_CACHE_TTL_MS) {
+      return entry.value;
     }
-    const value = await fetcher();
-    cache[key] = value;
+    let value;
+    try {
+      value = await fetcher();
+    } catch (err) {
+      if (entry === undefined) throw err;
+      return wrapped ? entry.value : entry;
+    }
+    cache[key] = { fetchedAt: now(), value };
     return value;
   }
   return {
+    usedKeys,
     getMovie: (id) => cached(`movie:${id}`, () => request(`/movie/${id}`)),
     getTv: (id) => cached(`tv:${id}`, () => request(`/tv/${id}`)),
     getTvExternalIds: (id) =>
@@ -263,4 +327,14 @@ export async function resolveTmdbTarget(descriptor, tmdbClient) {
     throw new ValidationError(`IMDB id not found on TMDB: ${descriptor.imdbId}`);
   }
   return { type: descriptor.type, id: descriptor.id };
+}
+
+/** True when the module at `moduleUrl` is the script node was started with, following symlinks. */
+export function isEntrypoint(moduleUrl, argv1 = process.argv[1]) {
+  if (!argv1) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
 }

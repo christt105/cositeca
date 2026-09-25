@@ -10,13 +10,15 @@ permissions:
   actions: write
   pull-requests: write
 
-concurrency:
-  group: add-entry
-  cancel-in-progress: false
-
 jobs:
   process:
-    if: contains(github.event.issue.labels.*.name, 'entry')
+    if: >-
+      github.event.issue.state == 'open' &&
+      contains(github.event.issue.labels.*.name, 'entry') &&
+      !contains(github.event.issue.labels.*.name, 'bug')
+    concurrency:
+      group: catalog-writes
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

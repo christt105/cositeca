@@ -5,11 +5,12 @@ import {
   createTmdbClient,
   loadTmdbCache,
   saveTmdbCache,
+  createLinkIndex,
 } from "./lib.js";
+import { findIndistinguishableVersions } from "../site/rules.js";
+import { loadConfig } from "./config.js";
 
-const groups = load(readFileSync("groups.yaml", "utf8"));
-const qualities = load(readFileSync("qualities.yaml", "utf8"));
-const languages = load(readFileSync("languages.yaml", "utf8"));
+const { groups, qualities, languages } = loadConfig(process.cwd());
 
 const cachePath = process.env.TMDB_CACHE_PATH ?? ".cache/tmdb.json";
 const tmdbCache = loadTmdbCache(cachePath);
@@ -22,7 +23,8 @@ if (!tmdbClient) {
 }
 
 let errors = 0;
-const seenLinks = new Map();
+let warnings = 0;
+const linkIndex = createLinkIndex();
 
 for (const type of ["movies", "series"]) {
   let filenames;
@@ -37,11 +39,15 @@ for (const type of ["movies", "series"]) {
       const data = load(readFileSync(path, "utf8"));
       validateTitleFile(type, filename, data, { qualities, groups, languages });
       for (const entry of data.links) {
-        const { link } = entry;
-        if (seenLinks.has(link)) {
-          throw new Error(`duplicate link, also used in ${seenLinks.get(link)}`);
+        const earlier = linkIndex.add(entry.link, path);
+        if (earlier !== undefined) {
+          throw new Error(`duplicate link, also used in ${earlier}`);
         }
-        seenLinks.set(link, path);
+      }
+      for (const group of findIndistinguishableVersions(data.links)) {
+        const links = group.map((entry) => entry.link).join(", ");
+        console.warn(`${path}: indistinguishable versions: ${links}`);
+        warnings++;
       }
       if (tmdbClient) {
         const tmdbType = type === "movies" ? "movie" : "tv";
@@ -65,6 +71,10 @@ for (const type of ["movies", "series"]) {
 
 if (tmdbClient) {
   saveTmdbCache(cachePath, tmdbCache);
+}
+
+if (warnings > 0) {
+  console.warn(`\n${warnings} indistinguishable version group(s) found`);
 }
 
 if (errors > 0) {

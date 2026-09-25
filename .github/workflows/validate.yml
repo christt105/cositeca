@@ -3,7 +3,11 @@ name: Validate
 on:
   pull_request:
   push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -17,3 +21,13 @@ jobs:
       - run: npm run validate
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm test
