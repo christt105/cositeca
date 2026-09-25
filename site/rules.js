@@ -118,6 +118,7 @@ export function matchesSearch(item, query) {
   if (/^\d+$/.test(query) && String(item.tmdb) === query) return true;
   return (
     normalizeText(item.title).includes(q) ||
-    normalizeText(item.originalTitle || "").includes(q)
+    normalizeText(item.originalTitle || "").includes(q) ||
+    normalizeText(item.englishTitle || "").includes(q)
   );
 }

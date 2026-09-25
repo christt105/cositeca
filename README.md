@@ -13,7 +13,11 @@ synopses). Deployed on GitHub Pages.
   synopsis, tagline, genres, runtime or season count, backdrop and vote,
   taken from the same TMDB responses the catalog already needs (no extra
   requests). `site/titles/` is wiped on every build so deleted titles leave
-  no orphans; both outputs are gitignored.
+  no orphans; both outputs are gitignored. Movie and series lookups add
+  `append_to_response=translations`, so each catalog entry can carry an
+  `englishTitle` (the en-US translation, else any other English one) that the
+  grid search matches alongside `title` and `originalTitle`; it is omitted
+  when it equals either of them ignoring case and accents.
 - `site/` is a static, dependency-free page that reads `catalog.json`. A
   hash router in `app.js` serves `#/` (grid with search and filters, both
   kept in the hash so back/forward and shared URLs restore them),
@@ -157,7 +161,10 @@ default, override with `TMDB_CACHE_PATH`) so re-running them only fetches
 TMDB data for ids not already cached. In CI (`deploy.yml`) that directory is
 persisted with `actions/cache`, keyed per run and restored from the most
 recent previous run, so a push that only adds one new title doesn't refetch
-metadata for the whole catalog.
+metadata for the whole catalog. Only the English translations of a movie or
+series response are kept in the cache, and a cached movie or series entry
+without them counts as stale (it is refetched, falling back to the old entry
+if TMDB fails).
 
 ## PWA and offline
 

@@ -9,6 +9,7 @@ import {
   purgeTmdbCache,
   parseAddedTimestamps,
   isEntrypoint,
+  englishTitle,
 } from "./lib.js";
 import { loadConfig } from "./config.js";
 
@@ -16,6 +17,11 @@ const seasonNameOverrides = { all: "Serie completa" };
 
 function backdropUrl(path) {
   return path ? `https://image.tmdb.org/t/p/w780${path}` : null;
+}
+
+function englishTitleField(info, title, originalTitle) {
+  const english = englishTitle(info, [title, originalTitle]);
+  return english ? { englishTitle: english } : {};
 }
 
 function baseDetail(info) {
@@ -47,6 +53,7 @@ async function buildMovieEntry(id, data, { tmdb, groups, qualities }) {
     imdb: info.imdb_id ?? null,
     title: info.title,
     originalTitle: info.original_title,
+    ...englishTitleField(info, info.title, info.original_title),
     year: info.release_date ? info.release_date.slice(0, 4) : null,
     poster: data.poster ?? tmdb.posterUrl(info.poster_path),
     qualities: dedupeQualities(links.map((l) => l.quality), qualities),
@@ -114,6 +121,7 @@ async function buildSeriesEntry(id, data, { tmdb, groups, qualities }) {
     imdb: externalIds.imdb_id ?? null,
     title: info.name,
     originalTitle: info.original_name,
+    ...englishTitleField(info, info.name, info.original_name),
     year: info.first_air_date ? info.first_air_date.slice(0, 4) : null,
     poster: seriesPoster,
     qualities: dedupeQualities(links.map((l) => l.quality), qualities),
