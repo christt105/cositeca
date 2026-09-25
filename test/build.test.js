@@ -47,3 +47,46 @@ describe("loadTitleEntries", () => {
     }
   });
 });
+
+describe("loadTitleEntries englishTitle", () => {
+  let root;
+  let cwd;
+  const translations = (title) => ({
+    translations: { translations: [{ iso_639_1: "en", iso_3166_1: "US", data: { title } }] },
+  });
+
+  before(() => {
+    root = mkdtempSync(join(tmpdir(), "cositeca-build-en-"));
+    mkdirSync(join(root, "movies"));
+    for (const id of [129, 24428]) {
+      writeFileSync(
+        join(root, "movies", `${id}.yaml`),
+        yaml({ links: [{ quality: "1080p", link: link(id) }] })
+      );
+    }
+    cwd = process.cwd();
+    process.chdir(root);
+  });
+
+  after(() => {
+    process.chdir(cwd);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("stores the English title only when it adds a new name", async () => {
+    const { groups, qualities } = config();
+    const tmdb = fakeTmdb({
+      movies: {
+        129: { id: 129, title: "El viaje de Chihiro", original_title: "千と千尋の神隠し", ...translations("Spirited Away") },
+        24428: { id: 24428, title: "Vengadores", original_title: "The Avengers", ...translations("The Avengers") },
+      },
+    });
+    const entries = await loadTitleEntries(
+      { tmdb, groups, qualities },
+      { addedTimestamps: new Map(), now: 1000 }
+    );
+    const byId = Object.fromEntries(entries.map((e) => [e.entry.tmdb, e.entry]));
+    assert.equal(byId[129].englishTitle, "Spirited Away");
+    assert.equal("englishTitle" in byId[24428], false);
+  });
+});

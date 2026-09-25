@@ -258,6 +258,41 @@ export function purgeTmdbCache(cache, usedKeys) {
   }
 }
 
+/**
+ * A TMDB movie or tv response with `translations` (from
+ * `append_to_response=translations`) reduced to the English ones, the only
+ * ones the build reads, so the cache does not store every language.
+ */
+export function keepEnglishTranslations(data) {
+  const all = data.translations?.translations ?? [];
+  return {
+    ...data,
+    translations: { translations: all.filter((t) => t.iso_639_1 === "en") },
+  };
+}
+
+function hasTranslations(value) {
+  return Array.isArray(value?.translations?.translations);
+}
+
+/**
+ * The English title of a TMDB movie or tv response carrying translations:
+ * the en-US one, else any other non-empty English one. Null when there is
+ * none or it matches (ignoring case and accents) any of `otherTitles`.
+ */
+export function englishTitle(info, otherTitles = []) {
+  const titleOf = (t) => (t.data?.title || t.data?.name || "").trim();
+  const english = (info.translations?.translations ?? []).filter(
+    (t) => t.iso_639_1 === "en" && titleOf(t)
+  );
+  const chosen = english.find((t) => t.iso_3166_1 === "US") ?? english[0];
+  if (!chosen) return null;
+  const title = titleOf(chosen);
+  const key = normalizeText(title);
+  if (otherTitles.some((other) => other && normalizeText(other) === key)) return null;
+  return title;
+}
+
 export const TMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function createTmdbClient(apiKey, { cache = {}, now = () => Date.now() } = {}) {
@@ -281,11 +316,15 @@ export function createTmdbClient(apiKey, { cache = {}, now = () => Date.now() } 
     }
     return res.json();
   }
-  async function cached(key, fetcher) {
+  async function requestWithTranslations(path) {
+    const data = await request(path, { append_to_response: "translations" });
+    return keepEnglishTranslations(data);
+  }
+  async function cached(key, fetcher, isComplete = () => true) {
     usedKeys.add(key);
     const entry = cache[key];
     const wrapped = entry && typeof entry.fetchedAt === "number";
-    if (wrapped && now() - entry.fetchedAt < TMDB_CACHE_TTL_MS) {
+    if (wrapped && now() - entry.fetchedAt < TMDB_CACHE_TTL_MS && isComplete(entry.value)) {
       return entry.value;
     }
     let value;
@@ -300,8 +339,10 @@ export function createTmdbClient(apiKey, { cache = {}, now = () => Date.now() } 
   }
   return {
     usedKeys,
-    getMovie: (id) => cached(`movie:${id}`, () => request(`/movie/${id}`)),
-    getTv: (id) => cached(`tv:${id}`, () => request(`/tv/${id}`)),
+    getMovie: (id) =>
+      cached(`movie:${id}`, () => requestWithTranslations(`/movie/${id}`), hasTranslations),
+    getTv: (id) =>
+      cached(`tv:${id}`, () => requestWithTranslations(`/tv/${id}`), hasTranslations),
     getTvExternalIds: (id) =>
       cached(`tvExternalIds:${id}`, () => request(`/tv/${id}/external_ids`)),
     getTvSeason: (id, season) =>

@@ -232,6 +232,20 @@ describe("matchesSearch", () => {
     assert.equal(matchesSearch({ tmdb: 2, title: "Pelicula" }, "película"), true);
     assert.equal(matchesSearch(other, "xyz"), false);
   });
+
+  test("matches the English title", () => {
+    const chihiro = {
+      tmdb: 129,
+      imdb: "tt0245429",
+      title: "El viaje de Chihiro",
+      originalTitle: "千と千尋の神隠し",
+      englishTitle: "Spirited Away",
+    };
+    assert.equal(matchesSearch(chihiro, "spirited away"), true);
+    assert.equal(matchesSearch(chihiro, "chihiro"), true);
+    assert.equal(matchesSearch(chihiro, "千と千尋"), true);
+    assert.equal(matchesSearch(other, "spirited"), false);
+  });
 });
 
 describe("normalizeText", () => {

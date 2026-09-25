@@ -14,6 +14,8 @@ import {
   validateLinkEntry,
   createTmdbClient,
   purgeTmdbCache,
+  englishTitle,
+  keepEnglishTranslations,
   TMDB_CACHE_TTL_MS,
   resolveTmdbTarget,
   parseAddedTimestamps,
@@ -360,7 +362,10 @@ describe("createTmdbClient", () => {
       },
       async () => {
         const client = createTmdbClient("plain-key");
-        assert.deepEqual(await client.getMovie(550), { id: 550 });
+        assert.deepEqual(await client.getMovie(550), {
+          id: 550,
+          translations: { translations: [] },
+        });
       }
     );
     assert.equal(urls.length, 1);
@@ -368,6 +373,7 @@ describe("createTmdbClient", () => {
     assert.equal(url.pathname, "/3/movie/550");
     assert.equal(url.searchParams.get("api_key"), "plain-key");
     assert.equal(url.searchParams.get("language"), "es-ES");
+    assert.equal(url.searchParams.get("append_to_response"), "translations");
     assert.deepEqual(urls[0].headers, {});
   });
 
@@ -402,11 +408,77 @@ describe("createTmdbClient", () => {
       }
     );
     assert.equal(calls, 1);
-    assert.deepEqual(cache, { "movie:550": { fetchedAt: 1000, value: { id: 550 } } });
+    assert.deepEqual(cache, {
+      "movie:550": { fetchedAt: 1000, value: { id: 550, translations: { translations: [] } } },
+    });
+  });
+
+  test("caches only the English translations of a movie or series", async () => {
+    const cache = {};
+    const translation = (lang, country, title) => ({
+      iso_639_1: lang,
+      iso_3166_1: country,
+      data: { title },
+    });
+    await withFetch(
+      async () =>
+        okResponse({
+          id: 129,
+          translations: {
+            translations: [
+              translation("fr", "FR", "Le Voyage de Chihiro"),
+              translation("en", "US", "Spirited Away"),
+              translation("en", "GB", "Spirited Away"),
+            ],
+          },
+        }),
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => 0 });
+        await client.getMovie(129);
+      }
+    );
+    assert.deepEqual(
+      cache["movie:129"].value.translations.translations.map((t) => t.iso_3166_1),
+      ["US", "GB"]
+    );
+  });
+
+  test("refetches a fresh entry cached before translations were requested", async () => {
+    const cache = { "tv:1396": { fetchedAt: 1000, value: { id: 1396, name: "old" } } };
+    let calls = 0;
+    await withFetch(
+      async () => {
+        calls++;
+        return okResponse({ id: 1396, name: "new", translations: { translations: [] } });
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => 1000 });
+        assert.equal((await client.getTv(1396)).name, "new");
+      }
+    );
+    assert.equal(calls, 1);
+  });
+
+  test("keeps an entry cached before translations were requested when the refetch fails", async () => {
+    const cache = { "movie:550": { fetchedAt: 1000, value: { id: 550, title: "old" } } };
+    await withFetch(
+      async () => {
+        throw new Error("network down");
+      },
+      async () => {
+        const client = createTmdbClient("plain-key", { cache, now: () => 1000 });
+        assert.equal((await client.getMovie(550)).title, "old");
+      }
+    );
   });
 
   test("reuses a fresh cache entry without refetching", async () => {
-    const cache = { "movie:550": { fetchedAt: 1000, value: { id: 550, title: "fresh" } } };
+    const cache = {
+      "movie:550": {
+        fetchedAt: 1000,
+        value: { id: 550, title: "fresh", translations: { translations: [] } },
+      },
+    };
     await withFetch(
       async () => {
         throw new Error("should not reach the network");
@@ -510,6 +582,50 @@ describe("createTmdbClient", () => {
     const client = createTmdbClient("plain-key");
     assert.equal(client.posterUrl("/a.jpg"), "https://image.tmdb.org/t/p/w342/a.jpg");
     assert.equal(client.posterUrl(null), null);
+  });
+});
+
+describe("englishTitle", () => {
+  const tr = (lang, country, data) => ({ iso_639_1: lang, iso_3166_1: country, data });
+  const info = (...translations) => ({ translations: { translations } });
+
+  test("returns the en-US movie title", () => {
+    const movie = info(tr("en", "GB", { title: "Spirited Away (UK)" }), tr("en", "US", { title: "Spirited Away" }));
+    assert.equal(englishTitle(movie, ["El viaje de Chihiro", "千と千尋の神隠し"]), "Spirited Away");
+  });
+
+  test("falls back to another English translation when en-US is empty", () => {
+    const series = info(tr("en", "US", { name: "" }), tr("en", "GB", { name: "Money Heist" }));
+    assert.equal(englishTitle(series, ["La casa de papel"]), "Money Heist");
+  });
+
+  test("reads the series name field", () => {
+    assert.equal(englishTitle(info(tr("en", "US", { name: "Dark" })), ["Oscuro"]), "Dark");
+  });
+
+  test("ignores other languages", () => {
+    assert.equal(englishTitle(info(tr("fr", "FR", { title: "Le Voyage" })), ["X"]), null);
+  });
+
+  test("is null when it matches the title or original title ignoring case and accents", () => {
+    const amelie = info(tr("en", "US", { title: "Amélie" }));
+    assert.equal(englishTitle(amelie, ["AMELIE", "Le Fabuleux Destin d'Amélie Poulain"]), null);
+    const avengers = info(tr("en", "US", { title: "The Avengers" }));
+    assert.equal(englishTitle(avengers, ["Vengadores", "The Avengers"]), null);
+  });
+
+  test("is null without translations or with only empty ones", () => {
+    assert.equal(englishTitle({}, ["X"]), null);
+    assert.equal(englishTitle(info(tr("en", "US", { title: "  " })), ["X"]), null);
+  });
+});
+
+describe("keepEnglishTranslations", () => {
+  test("adds an empty translation list when the response has none", () => {
+    assert.deepEqual(keepEnglishTranslations({ id: 1 }), {
+      id: 1,
+      translations: { translations: [] },
+    });
   });
 });
 
