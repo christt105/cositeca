@@ -1,6 +1,8 @@
 import argparse
 import http.server
 
+MAX_BODY = 5 * 1024 * 1024
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
@@ -9,6 +11,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404)
             return
         length = int(self.headers.get("Content-Length", 0))
+        if length > MAX_BODY:
+            self.send_error(413)
+            return
         body = self.rfile.read(length)
         with open(f"{self.directory}/{targets[self.path]}", "wb") as f:
             f.write(body)
@@ -18,12 +23,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b"ok")
 
     def log_message(self, fmt, *args):
-        if "/save-" in (args[0] if args else ""):
+        if args and "/save-" in str(args[0]):
             print(f"saved {args[0]} ({self.headers.get('Content-Length')} bytes)")
 
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--dir", default="cache")
     args = parser.parse_args()
@@ -31,7 +37,7 @@ def main():
     def handler(*a, **kw):
         return Handler(*a, directory=args.dir, **kw)
 
-    http.server.ThreadingHTTPServer(("0.0.0.0", args.port), handler).serve_forever()
+    http.server.ThreadingHTTPServer((args.host, args.port), handler).serve_forever()
 
 
 if __name__ == "__main__":
