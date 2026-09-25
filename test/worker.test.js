@@ -342,7 +342,10 @@ describe("routes", () => {
   });
 
   test("images and find map to their TMDB endpoints", async () => {
-    assert.equal((await upstreamFor("/images?type=tv&id=1399")).pathname, "/3/tv/1399/images");
+    const images = await upstreamFor("/images?type=tv&id=1399");
+    assert.equal(images.pathname, "/3/tv/1399/images");
+    assert.equal(images.searchParams.get("language"), "");
+    assert.equal(images.searchParams.has("include_image_language"), false);
     const find = await upstreamFor("/find/tt0137523");
     assert.equal(find.pathname, "/3/find/tt0137523");
     assert.equal(find.searchParams.get("external_source"), "imdb_id");

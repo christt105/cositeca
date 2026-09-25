@@ -1,4 +1,4 @@
-const CACHE = "cositeca-v2";
+const CACHE = "cositeca-v3";
 const SHELL = [
   "./",
   "index.html",
@@ -41,6 +41,10 @@ function isPoster(url) {
   return url.hostname === "image.tmdb.org";
 }
 
+function isThumbnail(url) {
+  return isPoster(url) && /^\/t\/p\/w(92|185)\//.test(url.pathname);
+}
+
 async function trimPosters(cache) {
   const keys = await cache.keys();
   const posters = keys.filter((req) => isPoster(new URL(req.url)));
@@ -74,6 +78,6 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   const sameOrigin = url.origin === self.location.origin;
-  if (!sameOrigin && !isPoster(url)) return;
+  if (!sameOrigin && (!isPoster(url) || isThumbnail(url))) return;
   event.respondWith(networkFirst(request));
 });
