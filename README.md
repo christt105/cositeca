@@ -38,10 +38,13 @@ synopses). Deployed on GitHub Pages.
   title page and the add page open those forms with every field prefilled
   by query string, so users only review and submit. Both issue workflows
   (`add-entry.yml` and `batch.yml`) run on `opened` and `edited`, but only
-  for open issues without the `bug` label, so editing an applied (closed)
-  issue does nothing and an issue that failed with `invalid` can be fixed
-  by editing it. They share the `catalog-writes` concurrency group, so
-  only one run writes to the catalog at a time.
+  for open issues without the `bug` or `validation-failed` label, so
+  editing an applied (closed) issue does nothing and an issue that failed
+  with `invalid` can be fixed by editing it. `validation-failed` marks an
+  issue whose bot PR failed `validate.yml`: the PR and its
+  `bot/entry-<issue>` branch stay open for a maintainer to fix or close.
+  They share the `catalog-writes` concurrency group, so only one run writes
+  to the catalog at a time.
 - `fix.yml` deletes the link at `old_link` when `new_link` is `-`, or when
   `new_link` is empty and no other field is filled. An empty `new_link`
   next to any other field keeps the current link. The same rule applies to

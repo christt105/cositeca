@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createTmdbClient, isEntrypoint } from "./lib.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, mergedMessage, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, reportValidationFailure, mergedMessage, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 import { parseIssueBody } from "./issue-fields.js";
 import {
@@ -128,7 +128,7 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
 
   const { subject, close } = describeResult(issueLabel, result);
 
-  const { validated, deployed } = await openBotPr({
+  const { prUrl, validated, deployed } = await openBotPr({
     subject,
     commitBody: `Closes #${issueNumber}`,
     prBody: `Closes #${issueNumber}`,
@@ -138,10 +138,7 @@ async function run({ issueNumber, issueAuthor, issueLabel, body, gh, git, progre
     progress,
   });
   if (!validated) {
-    gh([
-      "issue", "comment", issueNumber, "--body",
-      "La validación automática ha fallado en el PR generado, alguien lo revisará a mano.",
-    ]);
+    reportValidationFailure(gh, issueNumber, prUrl);
     return;
   }
 

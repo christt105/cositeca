@@ -71,6 +71,20 @@ export function mergedMessage(close, deployed) {
   return `${close} ${deployed ? DEPLOYED_SUFFIX : DEPLOY_PENDING_SUFFIX}`;
 }
 
+export const VALIDATION_FAILED_LABEL = "validation-failed";
+
+/**
+ * Reports a bot PR whose validation failed: labels the issue so the issue
+ * workflows leave it alone, and tells the author.
+ */
+export function reportValidationFailure(gh, issueNumber, prUrl) {
+  gh(["issue", "edit", issueNumber, "--add-label", VALIDATION_FAILED_LABEL]);
+  gh([
+    "issue", "comment", issueNumber, "--body",
+    `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
+  ]);
+}
+
 export const NO_CHANGES_MESSAGE =
   "La petición no cambia nada: el catálogo ya estaba así. No se ha creado ningún PR.";
 

@@ -8,6 +8,8 @@ import {
   reportFailure,
   runUrl,
   mergedMessage,
+  reportValidationFailure,
+  VALIDATION_FAILED_LABEL,
   INTERNAL_ERROR_LABEL,
   INTERNAL_ERROR_MESSAGE,
   MERGED_FOLLOWUP_MESSAGE,
@@ -251,5 +253,17 @@ describe("reportFailure after the merge", () => {
       ["gh", "issue", "close", "7"],
     ]);
     assert.equal(r.calls.some((c) => c.includes(INTERNAL_ERROR_LABEL) || c.includes(INTERNAL_ERROR_MESSAGE)), false);
+  });
+});
+
+describe("reportValidationFailure", () => {
+  test("labels the issue so the workflows skip it, then points the author at the PR", () => {
+    const r = runners();
+    reportValidationFailure(r.gh, "7", PR_URL);
+    assert.deepEqual(r.calls, [
+      ["gh", "issue", "edit", "7", "--add-label", VALIDATION_FAILED_LABEL],
+      ["gh", "issue", "comment", "7", "--body", `La validación automática ha fallado en el PR generado (${PR_URL}), alguien lo revisará a mano.`],
+    ]);
+    assert.equal(VALIDATION_FAILED_LABEL, "validation-failed");
   });
 });

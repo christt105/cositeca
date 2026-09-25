@@ -10,7 +10,7 @@ import {
   describeResult,
   collectExistingLinks,
 } from "./operations.js";
-import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, NO_CHANGES_MESSAGE } from "./gh-flow.js";
+import { openBotPr, closeIssueIfOpen, checkAntiSpam, reportFailure, runUrl, hasPendingChanges, reportValidationFailure, NO_CHANGES_MESSAGE } from "./gh-flow.js";
 import { loadConfig, saveLanguages } from "./config.js";
 
 export const MAX_OPERATIONS = 50;
@@ -251,10 +251,7 @@ async function run({ issueNumber, issueAuthor, body, gh, git, progress }) {
     progress,
   });
   if (!validated) {
-    gh([
-      "issue", "comment", issueNumber, "--body",
-      `La validación automática ha fallado en el PR generado (${prUrl}), alguien lo revisará a mano.`,
-    ]);
+    reportValidationFailure(gh, issueNumber, prUrl);
     return;
   }
 

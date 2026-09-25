@@ -15,7 +15,8 @@ jobs:
     if: >-
       github.event.issue.state == 'open' &&
       contains(github.event.issue.labels.*.name, 'entry') &&
-      !contains(github.event.issue.labels.*.name, 'bug')
+      !contains(github.event.issue.labels.*.name, 'bug') &&
+      !contains(github.event.issue.labels.*.name, 'validation-failed')
     concurrency:
       group: catalog-writes
       cancel-in-progress: false
