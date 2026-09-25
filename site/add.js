@@ -164,6 +164,7 @@ async function select(type, id) {
     year: yearOf(info),
     poster: info.poster_path ? `${IMG}/w342${info.poster_path}` : "",
     seasons: type === "tv" ? (info.seasons || []) : [],
+    originalLanguage: info.original_language ?? null,
   };
   const siteType = toSiteType(type);
   const existing = ctx.byKey.get(catalogKey(type, id));
@@ -199,7 +200,7 @@ async function loadPosters(type, id) {
   await renderPosterPicker(box, type, id, current.poster, (choice) => {
     posterChoice = choice;
     updateOutcome();
-  });
+  }, { originalLanguage: current.originalLanguage });
   if (selected !== current) box.innerHTML = "";
 }
 

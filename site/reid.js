@@ -141,7 +141,7 @@ export function openReidentify(slot, item, link, submit) {
 
     renderPosterPicker(posterBox, type, id, poster, (value) => {
       posterChoice = value;
-    }).then((ok) => {
+    }, { originalLanguage: info.original_language ?? null }).then((ok) => {
       if (!ok) posterBox.innerHTML = "";
     });
 

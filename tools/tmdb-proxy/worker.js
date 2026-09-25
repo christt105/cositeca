@@ -28,7 +28,7 @@ const ROUTES = [
       const type = params.get("type");
       const id = params.get("id");
       if (!["movie", "tv"].includes(type) || !/^\d{1,9}$/.test(id ?? "")) return null;
-      return { path: `/${type}/${id}/images`, query: { include_image_language: "es,en,null" } };
+      return { path: `/${type}/${id}/images`, query: { language: "" } };
     },
   },
   {
